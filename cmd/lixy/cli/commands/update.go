@@ -3,7 +3,7 @@ package commands
 import (
 	"fmt"
 
-	"github.com/MinaroShikuchi/lixy/internal/controller"
+	"github.com/MinaroShikuchi/lixy/internal/services"
 	"github.com/spf13/cobra"
 )
 
@@ -39,7 +39,7 @@ var updateDeploymentCmd = &cobra.Command{
 		}
 
 		// Call the controller function
-		err := controller.UpdateDeployment(targetLXC, composeFilePath)
+		err := services.UpdateDeployment(targetLXC, composeFilePath)
 		if err != nil {
 			return fmt.Errorf("failed to update deployment: %v", err)
 		}

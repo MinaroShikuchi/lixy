@@ -1,5 +1,5 @@
 // internal/controller/health.go
-package controller
+package services
 
 import (
 	"context"

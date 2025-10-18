@@ -25,10 +25,28 @@ type Client struct {
 }
 
 // NewClient creates a new client instance
-func LyxiClient() *Client {
+func LyxiClient(socketPath string) *Client {
 	return &Client{
-		SocketPath: "/tmp/lixy.sock",
+		SocketPath: socketPath,
 	}
+}
+
+// Register with controller
+func (c *Client) RegisterWithController(controller string, token string, name string) error {
+	resp, err := c.SendCommand("register-agent", map[string]string{
+		"controller": controller,
+		"token":      token,
+		"name":       name,
+	})
+
+	if !resp.Success {
+		return fmt.Errorf("registration failed: %s", resp.Message)
+	}
+
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // SendCommand sends a command to the agent and returns the response

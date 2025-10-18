@@ -1,10 +1,11 @@
 // internal/controller/health_checker.go
-package controller
+package client
 
 import (
 	"log"
 	"time"
 
+	"github.com/MinaroShikuchi/lixy/internal/services"
 	"github.com/MinaroShikuchi/lixy/internal/store"
 )
 
@@ -64,7 +65,7 @@ func (c *HealthChecker) checkAllAgents() {
 	// Process each agent
 	for _, agent := range agents {
 		// Check agent's health
-		healthy, message := CheckAgentHealth(agent, c.agentStore)
+		healthy, message := services.CheckAgentHealth(agent, c.agentStore)
 
 		// Log the result
 		logLevel := "INFO"

@@ -17,34 +17,44 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/MinaroShikuchi/lixy/internal/auth"
-	"github.com/MinaroShikuchi/lixy/internal/controller"
 	"github.com/MinaroShikuchi/lixy/internal/handlers"
+	client "github.com/MinaroShikuchi/lixy/internal/lixy-client"
 	"github.com/MinaroShikuchi/lixy/internal/middlewares"
+	"github.com/MinaroShikuchi/lixy/internal/services"
 	"github.com/MinaroShikuchi/lixy/internal/store"
+	"github.com/MinaroShikuchi/lixy/pkg/types"
 )
 
-// Command represents a request from the CLI
-type Command struct {
-	Action string            `json:"action"`
-	Params map[string]string `json:"params"`
-}
-
-// Response represents the agent's response
-type Response struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data"`
+// Configuration for the lyxi controller
+type Config struct {
+	Port     string
+	LogLevel string
 }
 
 const socketPath = "/tmp/lixy.sock"
 
 var agentStore *store.AgentStore
 
-func SetAgentStore(store *store.AgentStore) {
+func setAgentStore(store *store.AgentStore) {
 	agentStore = store
 }
 
 func main() {
+	// Initialize configuration
+	config := Config{
+		Port:     "8080",
+		LogLevel: "info",
+	}
+
+	// Set up structured logging
+	logger := middlewares.SetupLogger(config.LogLevel)
+
+	// Log agent startup with version and configuration details
+	logger.Info("Lixy controller starting",
+		"version", "0.1.0",
+		"port", config.Port,
+		"logLevel", config.LogLevel)
+
 	// Initialize authentication system
 	if err := auth.InitializeAuth(); err != nil {
 		log.Fatalf("Failed to initialize authentication: %v", err)
@@ -55,8 +65,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize agent store: %v", err)
 	}
+	setAgentStore(agentStore)
 
-	SetAgentStore(agentStore)
 	// Set the agent store for the auth package
 	handlers.SetAgentStore(agentStore)
 	// Create a WaitGroup for coordinating shutdown
@@ -82,7 +92,7 @@ func main() {
 
 	// Setup HTTP server for agent registration
 	httpServer := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + config.Port,
 		Handler: setupHTTPHandlers(),
 	}
 
@@ -125,7 +135,7 @@ func main() {
 	}()
 
 	// Create health checker with 5-minute interval
-	healthChecker := controller.NewHealthChecker(agentStore, 5*time.Minute)
+	healthChecker := client.NewHealthChecker(agentStore, 5*time.Minute)
 
 	// Start the health checker
 	healthChecker.Start()
@@ -136,7 +146,7 @@ func main() {
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
 	<-signalCh
 
-	log.Println("Shutting down servers...")
+	logger.Info("Shutting down server...")
 
 	// Shutdown HTTP server first
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -180,13 +190,13 @@ func handleConnection(conn net.Conn) {
 	decoder := json.NewDecoder(conn)
 	encoder := json.NewEncoder(conn)
 
-	var cmd Command
+	var cmd types.Command
 	if err := decoder.Decode(&cmd); err != nil {
-		encoder.Encode(Response{Success: false, Message: "Invalid command format"})
+		encoder.Encode(types.Response{Success: false, Message: "Invalid command format"})
 		return
 	}
 
-	var response Response
+	var response types.Response
 
 	switch cmd.Action {
 	case "get-deployments":
@@ -195,7 +205,7 @@ func handleConnection(conn net.Conn) {
 			{"name": "app1", "targetLXC": "101", "status": "running"},
 			{"name": "app2", "targetLXC": "102", "status": "stopped"},
 		}
-		response = Response{Success: true, Data: deployments}
+		response = types.Response{Success: true, Data: deployments}
 
 	case "get-deployment":
 		// Handle get specific deployment
@@ -208,7 +218,7 @@ func handleConnection(conn net.Conn) {
 			"image":     "my-app:latest",
 			"created":   "2023-01-01 12:00:00",
 		}
-		response = Response{Success: true, Data: deployment}
+		response = types.Response{Success: true, Data: deployment}
 	case "get-targets":
 		// Get agents using the agent store
 		agents := agentStore.ListAgents()
@@ -232,15 +242,15 @@ func handleConnection(conn net.Conn) {
 
 			targets = append(targets, target)
 		}
-		response = Response{Success: true, Data: targets}
+		response = types.Response{Success: true, Data: targets}
 	// Implement other CRUD operations similarly
 	case "i-dont-know-yet":
-		if err := controller.UpdateDeployment("101", "/opt/deployments/app1"); err != nil {
+		if err := services.UpdateDeployment("101", "/opt/deployments/app1"); err != nil {
 			log.Printf("Error updating deployment: %v", err)
 		}
 
 	default:
-		response = Response{Success: false, Message: "Unknown command"}
+		response = types.Response{Success: false, Message: "Unknown command"}
 	}
 
 	encoder.Encode(response)
