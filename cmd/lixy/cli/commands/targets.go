@@ -27,7 +27,7 @@ var targetsCmd = &cobra.Command{
 that are managed by the GitOps agent.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get target data from the socket
-		c := client.LyxiClient()
+		c := client.LyxiClient("/tmp/lixy.sock")
 
 		targets, err := c.SendCommand("get-targets", nil)
 		if err != nil {

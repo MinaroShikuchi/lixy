@@ -12,7 +12,7 @@ var deploymentsCmd = &cobra.Command{
 	Use:   "deployments [NAME]",
 	Short: "List all deployments or get details of a specific deployment",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := client.LyxiClient()
+		c := client.LyxiClient("/tmp/lixy.sock")
 
 		// If a name is provided, get details for that specific deployment
 		if len(args) > 0 {

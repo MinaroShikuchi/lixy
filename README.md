@@ -83,7 +83,7 @@ go build -o lixy ./cmd/lixy
 
 # Set the JWT secret for token signing
 export LIXY_JWT_SECRET=$(openssl rand -base64 32)
-
+export LIXY_JWT_SECRET=nh91W2iL0wtnxy59EmJ98V4hM7CwGZg6AtjNy/oki9w=
 # Start the controller
 ./lixy
 ```
@@ -184,17 +184,15 @@ export LIXIES_WORK_DIR="/var/lib/lixies"              # Working directory
 lixy/
 ├── cmd/                      # Application entry points
 │   ├── lixy/                 # Controller binary
+│       └── cli/              # CLI Controller binary
 │   ├── lixies/               # CLI Agent binary
-│   └── cli/                  # CLI tool binary
+│       └── cli/              # CLI Agent binary
 ├── internal/                 # Private application code
 │   ├── auth/                 # Authentication logic
 │   ├── controller/           # TODO Rewrite in service /Controller implementation 
 │   ├── handlers/             # Handle function for HTTP server
 │   ├── middlewares/          # Middlewares function for HTTP server
 │   ├── store/                # Data storage implementations
-│   └── client/               # Client libraries for API communication
-├── lixies/                   # Agent binary
-│   ├── auth/                 # Authentication logic
 └── pkg/                      # Public libraries
     ├── client/               # TODO: To Review
     └── types/                # TODO: Externalize more type /Shared data types

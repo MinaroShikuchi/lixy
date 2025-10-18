@@ -9,13 +9,14 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/MinaroShikuchi/lixy/internal/shared"
 	"github.com/MinaroShikuchi/lixy/internal/store"
 )
 
 // RegisterWithController registers this agent with the controller using the provided token
 func RegisterWithController(tokenStore store.TokenStore, controllerURL, registrationToken, agentName string) error {
 	// Get system information
-	sysInfo, err := GetSystemInfo()
+	sysInfo, err := shared.GetSystemInfo()
 	if err != nil {
 		return fmt.Errorf("error collecting system info: %w", err)
 	}
@@ -26,7 +27,7 @@ func RegisterWithController(tokenStore store.TokenStore, controllerURL, registra
 		"token":      registrationToken,
 		"agent_name": agentName,
 		"agent_info": sysInfo,
-		"version":    Version,
+		"version":    sysInfo.Version,
 		"ip":         "localhost", // Using hostname as a placeholder for IP
 		"port":       8765,        // Default port for lixy agent
 	})
@@ -41,11 +42,12 @@ func RegisterWithController(tokenStore store.TokenStore, controllerURL, registra
 		"application/json",
 		bytes.NewBuffer(reqBody),
 	)
+	log.Println("Sent registration request to controller at:", controllerURL)
 	if err != nil {
 		return fmt.Errorf("error connecting to controller: %w", err)
 	}
 	defer resp.Body.Close()
-
+	log.Println("Received response from controller with status:", resp.Status)
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("registration failed: %s", body)

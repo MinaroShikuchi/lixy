@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/MinaroShikuchi/lixy/cmd/cli/commands"
+	"github.com/MinaroShikuchi/lixy/cmd/lixy/cli/commands"
 )
 
 func main() {
