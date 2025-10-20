@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -248,7 +249,29 @@ func handleConnection(conn net.Conn) {
 		if err := services.UpdateDeployment("101", "/opt/deployments/app1"); err != nil {
 			log.Printf("Error updating deployment: %v", err)
 		}
+	case "create-deployment":
+		// Extract parameters
+		name := cmd.Params["name"]
+		targetLXC := cmd.Params["target_lxc"]
+		composeYAML := cmd.Params["compose_yaml"]
 
+		// Validate parameters
+		if name == "" || targetLXC == "" || composeYAML == "" {
+			response = types.Response{Success: false, Message: "Missing required parameters"}
+			break
+		}
+
+		// Validate compose file format
+		if err := services.ValidateComposeFile(composeYAML); err != nil {
+			response = types.Response{Success: false, Message: "Invalid compose file: " + err.Error()}
+			break
+		}
+
+		err := services.DeployToTarget(name, targetLXC, []byte(composeYAML))
+		if err != nil {
+			response = types.Response{Success: false, Message: "Deployment failed: " + err.Error()}
+		}
+		response = types.Response{Success: true, Message: fmt.Sprintf("Deployment %s to target %s initiated", name, targetLXC)}
 	default:
 		response = types.Response{Success: false, Message: "Unknown command"}
 	}

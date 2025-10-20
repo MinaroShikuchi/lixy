@@ -9,20 +9,6 @@ import (
 	"os/exec"
 )
 
-// DeploymentRequest represents an incoming deployment update request
-type DeploymentRequest struct {
-	Action     string            `json:"action"`
-	ComposeDir string            `json:"composeDir"`
-	EnvVars    map[string]string `json:"envVars,omitempty"`
-}
-
-// DeploymentResponse represents the response to a deployment request
-type DeploymentResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-	Output  string `json:"output,omitempty"`
-}
-
 func HealthCheckHandler(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
