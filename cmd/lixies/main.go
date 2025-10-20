@@ -88,6 +88,7 @@ func main() {
 	mux.HandleFunc("/healthz", middlewares.LoggingMiddleware(handlers.HealthCheckHandler))
 	mux.HandleFunc("/deploy", middlewares.LoggingMiddleware(handlers.DeployHandler))
 	mux.HandleFunc("/update", middlewares.LoggingMiddleware(handlers.UpdateDeploymentHandler))
+	mux.HandleFunc("/deploy", middlewares.LoggingMiddleware(handlers.DeployHandler))
 
 	// Create server with timeouts
 	httpServer := &http.Server{
