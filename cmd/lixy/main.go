@@ -3,27 +3,13 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"log"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
-
-	"github.com/MinaroShikuchi/lixy/internal/auth"
-	"github.com/MinaroShikuchi/lixy/internal/handlers"
-	client "github.com/MinaroShikuchi/lixy/internal/lixy-client"
-	"github.com/MinaroShikuchi/lixy/internal/middlewares"
-	"github.com/MinaroShikuchi/lixy/internal/services"
-	"github.com/MinaroShikuchi/lixy/internal/store"
-	"github.com/MinaroShikuchi/lixy/pkg/types"
+	client "github.com/MinaroShikuchi/lixy/internal/client"
 )
 
 // Configuration for the lyxi controller
@@ -32,70 +18,15 @@ type Config struct {
 	LogLevel string
 }
 
-const socketPath = "/tmp/lixy.sock"
-
-var agentStore *store.AgentStore
-
-func setAgentStore(store *store.AgentStore) {
-	agentStore = store
-}
-
 func main() {
-	// Initialize configuration
-	config := Config{
-		Port:     "8080",
-		LogLevel: "info",
-	}
 
-	// Set up structured logging
-	logger := middlewares.SetupLogger(config.LogLevel)
+	// c := client.LixiesHttpClient("Lixy Controller", "0.1.0", 8080, "info", "/tmp/lixy.sock")
+	c := client.NewControllerClient("0.1.0", "8080", "info")
+	c.SetupHttpServer()
+	c.SetupSocketServer()
 
-	// Log agent startup with version and configuration details
-	logger.Info("Lixy controller starting",
-		"version", "0.1.0",
-		"port", config.Port,
-		"logLevel", config.LogLevel)
-
-	// Initialize authentication system
-	if err := auth.InitializeAuth(); err != nil {
-		log.Fatalf("Failed to initialize authentication: %v", err)
-	}
-
-	// Initialize agent store
-	agentStore, err := store.NewAgentStore()
-	if err != nil {
-		log.Fatalf("Failed to initialize agent store: %v", err)
-	}
-	setAgentStore(agentStore)
-
-	// Set the agent store for the auth package
-	handlers.SetAgentStore(agentStore)
 	// Create a WaitGroup for coordinating shutdown
 	var wg sync.WaitGroup
-
-	// Setup the Unix socket server (existing code)
-	if err := os.RemoveAll(socketPath); err != nil {
-		log.Fatalf("Failed to remove existing socket: %v", err)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(socketPath), 0755); err != nil {
-		log.Fatalf("Failed to create socket directory: %v", err)
-	}
-
-	socketListener, err := net.Listen("unix", socketPath)
-	if err != nil {
-		log.Fatalf("Failed to listen on socket: %v", err)
-	}
-
-	if err := os.Chmod(socketPath, 0660); err != nil {
-		log.Fatalf("Failed to set socket permissions: %v", err)
-	}
-
-	// Setup HTTP server for agent registration
-	httpServer := &http.Server{
-		Addr:    ":" + config.Port,
-		Handler: setupHTTPHandlers(),
-	}
 
 	// Create a context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -105,38 +36,18 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		log.Printf("Unix socket server listening on %s", socketPath)
-
-		for {
-			conn, err := socketListener.Accept()
-			if err != nil {
-				select {
-				case <-ctx.Done():
-					// Server is shutting down
-					return
-				default:
-					log.Printf("Failed to accept socket connection: %v", err)
-					continue
-				}
-			}
-
-			// Handle each connection in a separate goroutine
-			go handleConnection(conn)
-		}
+		c.StartSocketServer(ctx)
 	}()
 
-	// Start HTTP server in a goroutine
+	// Start server in a goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		log.Printf("HTTP server listening on %s", httpServer.Addr)
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP server failed: %v", err)
-		}
+		c.StartHttpServer()
 	}()
 
 	// Create health checker with 5-minute interval
-	healthChecker := client.NewHealthChecker(agentStore, 5*time.Minute)
+	healthChecker := client.NewHealthChecker(c.AgentStore, 5*time.Minute)
 
 	// Start the health checker
 	healthChecker.Start()
@@ -147,134 +58,19 @@ func main() {
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
 	<-signalCh
 
-	logger.Info("Shutting down server...")
+	c.Logger.Info("Shutting down server...")
 
 	// Shutdown HTTP server first
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("HTTP server shutdown error: %v", err)
-	}
-
-	// Stop accepting new socket connections
-	socketListener.Close()
+	c.StopHttpServer(shutdownCtx)
+	c.StopSocketServer()
 
 	// Signal the socket server to stop
 	cancel()
 
 	// Wait for all goroutines to finish
 	wg.Wait()
-	log.Println("All servers have shut down")
-}
-
-func setupHTTPHandlers() http.Handler {
-	mux := http.NewServeMux()
-	// Create authenticated routes
-	authenticatedAPI := http.NewServeMux()
-	// authenticatedAPI.HandleFunc("/api/status", statusHandler)
-	// Add authentication middleware for protected routes
-	mux.Handle("/api/", middlewares.AuthenticateAgent(authenticatedAPI))
-
-	// Add agent registration endpoints
-	mux.HandleFunc("/api/register-agent", handlers.RegisterAgentHandler)
-	mux.HandleFunc("/api/tokens/registration", handlers.GenerateRegistrationTokenHandler)
-	// Admin routes for listing agents
-	mux.HandleFunc("/admin/agents", handlers.ListAgentsHandler)
-
-	return mux
-}
-
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-
-	decoder := json.NewDecoder(conn)
-	encoder := json.NewEncoder(conn)
-
-	var cmd types.Command
-	if err := decoder.Decode(&cmd); err != nil {
-		encoder.Encode(types.Response{Success: false, Message: "Invalid command format"})
-		return
-	}
-
-	var response types.Response
-
-	switch cmd.Action {
-	case "get-deployments":
-		// Handle list all deployments
-		deployments := []map[string]string{
-			{"name": "app1", "targetLXC": "101", "status": "running"},
-			{"name": "app2", "targetLXC": "102", "status": "stopped"},
-		}
-		response = types.Response{Success: true, Data: deployments}
-
-	case "get-deployment":
-		// Handle get specific deployment
-		name := cmd.Params["name"]
-		// In a real implementation, look up the deployment by name
-		deployment := map[string]string{
-			"name":      name,
-			"targetLXC": "101",
-			"status":    "running",
-			"image":     "my-app:latest",
-			"created":   "2023-01-01 12:00:00",
-		}
-		response = types.Response{Success: true, Data: deployment}
-	case "get-targets":
-		// Get agents using the agent store
-		agents := agentStore.ListAgents()
-		// Convert agents to targets format
-		targets := make([]map[string]string, 0, len(agents))
-		for _, agent := range agents {
-			target := map[string]string{
-				"id":     agent.ID,
-				"name":   agent.Name,
-				"status": agent.Status,
-				"ip":     agent.IP,
-			}
-
-			// Add selected metadata fields if needed
-			for key, value := range agent.Metadata {
-				// Only include specific metadata fields you want in the response
-				if key == "version" || key == "os" || key == "arch" {
-					target[key] = value
-				}
-			}
-
-			targets = append(targets, target)
-		}
-		response = types.Response{Success: true, Data: targets}
-	// Implement other CRUD operations similarly
-	case "i-dont-know-yet":
-		if err := services.UpdateDeployment("101", "/opt/deployments/app1"); err != nil {
-			log.Printf("Error updating deployment: %v", err)
-		}
-	case "create-deployment":
-		// Extract parameters
-		name := cmd.Params["name"]
-		targetLXC := cmd.Params["target_lxc"]
-		composeYAML := cmd.Params["compose_yaml"]
-
-		// Validate parameters
-		if name == "" || targetLXC == "" || composeYAML == "" {
-			response = types.Response{Success: false, Message: "Missing required parameters"}
-			break
-		}
-
-		// Validate compose file format
-		if err := services.ValidateComposeFile(composeYAML); err != nil {
-			response = types.Response{Success: false, Message: "Invalid compose file: " + err.Error()}
-			break
-		}
-
-		err := services.DeployToTarget(name, targetLXC, []byte(composeYAML))
-		if err != nil {
-			response = types.Response{Success: false, Message: "Deployment failed: " + err.Error()}
-		}
-		response = types.Response{Success: true, Message: fmt.Sprintf("Deployment %s to target %s initiated", name, targetLXC)}
-	default:
-		response = types.Response{Success: false, Message: "Unknown command"}
-	}
-
-	encoder.Encode(response)
+	c.Logger.Info("Server shutdown complete")
 }

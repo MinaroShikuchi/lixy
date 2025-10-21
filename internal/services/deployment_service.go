@@ -12,25 +12,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type DeploymentRequest struct {
-	Action     string            `json:"action"`
-	ComposeDir string            `json:"composeDir"`
-	EnvVars    map[string]string `json:"envVars,omitempty"`
-}
-
-type DeploymentResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-	Output  string `json:"output,omitempty"`
-}
-
-func UpdateDeployment(targetLXC string, composeDir string) error {
+func UpdateDeployment(targetLXC string, composeYAML []byte) error {
 	lixiesEndpoint := fmt.Sprintf("http://%s:8765/deploy", targetLXC)
 
 	// Prepare the deployment request
-	deployRequest := DeploymentRequest{
-		Action:     "update",
-		ComposeDir: composeDir,
+	deployRequest := types.DeploymentRequest{
+		ComposeYAML: composeYAML,
 		EnvVars: map[string]string{
 			"DEPLOYMENT_ID": "app1",
 		},
@@ -49,7 +36,7 @@ func UpdateDeployment(targetLXC string, composeDir string) error {
 	defer resp.Body.Close()
 
 	// Parse response
-	var deployResponse DeploymentResponse
+	var deployResponse types.DeploymentResponse
 	if err := json.NewDecoder(resp.Body).Decode(&deployResponse); err != nil {
 		return fmt.Errorf("failed to decode response: %v", err)
 	}
@@ -62,10 +49,10 @@ func UpdateDeployment(targetLXC string, composeDir string) error {
 	return nil
 }
 
-func ValidateDeployment(targetLXC string, composeDir string) error {
+func ValidateDeployment(targetLXC string, composeYAML string) error {
 	var composeConfig map[string]interface{}
 
-	err := yaml.Unmarshal([]byte(composeDir), &composeConfig)
+	err := yaml.Unmarshal([]byte(composeYAML), &composeConfig)
 	if err != nil {
 		return fmt.Errorf("invalid compose file: %v", err)
 	}
@@ -79,7 +66,7 @@ func ValidateDeployment(targetLXC string, composeDir string) error {
 	return nil
 }
 
-func DeployToTarget(name string, targetLXC string, composeYAML []byte, agentStore *store.AgentStore) error {
+func DeployToTarget(name string, targetLXC string, composeYAML string, agentStore *store.AgentStore) error {
 	// Get agent information from the store
 	agent, found := agentStore.GetAgent(targetLXC)
 
@@ -88,12 +75,12 @@ func DeployToTarget(name string, targetLXC string, composeYAML []byte, agentStor
 	}
 
 	// Construct the deployment endpoint
-	deployURL := fmt.Sprintf("http://%s:%s/deploy", agent.IP, agent.Port)
+	deployURL := fmt.Sprintf("http://%s:%d/deploy", agent.IP, agent.Port)
 
 	// Create deployment request payload
 	deploymentRequest := types.DeploymentRequest{
 		Name:        name,
-		ComposeYAML: composeYAML,
+		ComposeYAML: []byte(composeYAML),
 	}
 
 	requestBody, err := json.Marshal(deploymentRequest)
@@ -122,4 +109,57 @@ func DeployToTarget(name string, targetLXC string, composeYAML []byte, agentStor
 	log.Printf("Deployment %s initiated successfully on target %s", name, targetLXC)
 	return nil
 
+}
+
+func DeleteDeployment(name string, targetLXC string, agentStore *store.AgentStore) error {
+	// For now, just log the deletion action
+	log.Printf("Deleting deployment %s from target %s", name, targetLXC)
+
+	agent, found := agentStore.GetAgent(targetLXC)
+
+	if !found {
+		return fmt.Errorf("agent with ID %s not found", targetLXC)
+	}
+
+	// Construct the deployment endpoint
+	deployURL := fmt.Sprintf("http://%s:%d/deploy", agent.IP, agent.Port)
+
+	// Create delete request payload
+	deleteRequest := types.DeploymentRequest{
+		Name: name,
+	}
+
+	requestBody, err := json.Marshal(deleteRequest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal delete request: %v", err)
+	}
+
+	// Send the delete request to the agent
+	req, err := http.NewRequest(http.MethodDelete, deployURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send delete request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Check the response status
+	if resp.StatusCode != http.StatusOK {
+		var errorResponse struct {
+			Message string `json:"message"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err != nil {
+			return fmt.Errorf("deletion failed with status %d", resp.StatusCode)
+		}
+		return fmt.Errorf("deletion failed: %s", errorResponse.Message)
+	}
+
+	log.Printf("Deployment %s deleted successfully from target %s", name, targetLXC)
+
+	return nil
 }

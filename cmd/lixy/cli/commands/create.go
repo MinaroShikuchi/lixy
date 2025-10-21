@@ -2,6 +2,7 @@ package commands
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/MinaroShikuchi/lixy/pkg/client"
@@ -18,32 +19,39 @@ var createDeploymentCmd = &cobra.Command{
 	Use:   "deployment [NAME]",
 	Short: "Create a new deployment",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) < 1 {
+			return errors.New("deployment name is required")
+		}
 		name := args[0]
 		targetLXC, _ := cmd.Flags().GetString("target-lxc")
-		composeFile, _ := cmd.Flags().GetString("compose-file")
+		composeFilePath, _ := cmd.Flags().GetString("compose-file")
 
 		// Validate required flags
 		if targetLXC == "" {
 			return errors.New("the --target-lxc flag is required")
 		}
-		if composeFile == "" {
+		if composeFilePath == "" {
 			return errors.New("the --compose-file flag is required")
 		}
 
 		// Validate file exists
-		if _, err := os.Stat(composeFile); errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(composeFilePath); errors.Is(err, os.ErrNotExist) {
 			return errors.New("the specified compose file does not exist")
 		}
 
 		// Read the compose file
-		composeData, err := os.ReadFile(composeFile)
+		composeData, err := os.ReadFile(composeFilePath)
 		if err != nil {
 			return err
 		}
 
 		// Send create-deployment command to the agent
-		createDeployment(name, targetLXC, composeData)
+		err = createDeployment(name, targetLXC, composeData)
+		if err != nil {
+			return fmt.Errorf("failed to create deployment: %v", err)
+		}
 
+		fmt.Printf("Deployment %s created successfully on target %s\n", name, targetLXC)
 		return nil
 	},
 }
@@ -71,4 +79,8 @@ func init() {
 	// Configure flags for the create command
 	createDeploymentCmd.Flags().String("target-lxc", "", "Target LXC container ID")
 	createDeploymentCmd.Flags().String("compose-file", "", "Path to Docker Compose file")
+
+	// Mark required flags
+	updateDeploymentCmd.MarkFlagRequired("compose-file")
+	updateDeploymentCmd.MarkFlagRequired("target-lxc")
 }

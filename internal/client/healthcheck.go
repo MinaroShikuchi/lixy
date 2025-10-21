@@ -1,4 +1,3 @@
-// internal/controller/health_checker.go
 package client
 
 import (
