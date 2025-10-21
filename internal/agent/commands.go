@@ -1,5 +1,5 @@
-// internal/client/registration.go
-package client
+// internal/agent/commands.go
+package agent
 
 import (
 	"bytes"
@@ -7,14 +7,39 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 
+	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/MinaroShikuchi/lixy/internal/shared"
 	"github.com/MinaroShikuchi/lixy/internal/store"
 )
 
+type AgentCommandHandler struct {
+	Logger     *slog.Logger
+	TokenStore *store.TokenStore
+}
+
+func (ch *AgentCommandHandler) HandleCommand(cmd domain.Command) domain.Response {
+	switch cmd.Action {
+	case "register-agent":
+		return ch.handleRegisterAgent(cmd)
+	default:
+		return domain.Response{Success: false, Message: "Unknown command"}
+	}
+}
+
+// Command-specific handlers
+func (ch *AgentCommandHandler) handleRegisterAgent(cmd domain.Command) domain.Response {
+	if err := ch.registerWithController(cmd.Params["controller"], cmd.Params["token"], cmd.Params["name"]); err != nil {
+		ch.Logger.Error("Agent registration failed", "error", err)
+		return domain.Response{Success: false, Message: "Registration failed: " + err.Error()}
+	}
+	return domain.Response{Success: true, Message: "Agent registered successfully"}
+}
+
 // RegisterWithController registers this agent with the controller using the provided token
-func RegisterWithController(tokenStore store.TokenStore, controllerURL, registrationToken, agentName string) error {
+func (ch *AgentCommandHandler) registerWithController(controllerURL, registrationToken, agentName string) error {
 	// Get system information
 	sysInfo, err := shared.GetSystemInfo()
 	if err != nil {
@@ -62,10 +87,17 @@ func RegisterWithController(tokenStore store.TokenStore, controllerURL, registra
 	if err := json.NewDecoder(resp.Body).Decode(&regResp); err != nil {
 		return fmt.Errorf("error parsing registration response: %w", err)
 	}
-	if err := tokenStore.StoreToken(regResp.AgentID, regResp.Token, controllerURL); err != nil {
+	if err := ch.TokenStore.StoreToken(regResp.AgentID, regResp.Token, controllerURL); err != nil {
 		return fmt.Errorf("error storing permanent token: %w", err)
 	}
 
 	log.Printf("Successfully registered with controller as agent %s", regResp.AgentID)
 	return nil
+}
+
+func NewAgentCommandHandler(logger *slog.Logger, TokenStore *store.TokenStore) *AgentCommandHandler {
+	return &AgentCommandHandler{
+		Logger:     logger,
+		TokenStore: TokenStore,
+	}
 }

@@ -1,14 +1,13 @@
 package types
 
-// Command represents a request from the CLI
-type Command struct {
-	Action string            `json:"action"`
-	Params map[string]string `json:"params"`
+type DeploymentRequest struct {
+	Name        string            `json:"name"`
+	ComposeYAML []byte            `json:"composeYAML"`
+	EnvVars     map[string]string `json:"envVars,omitempty"`
 }
 
-// Response represents the agent's response
-type Response struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data"`
+type DeploymentResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Output  string `json:"output,omitempty"`
 }
