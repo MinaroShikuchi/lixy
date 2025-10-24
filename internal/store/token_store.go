@@ -4,9 +4,6 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"log"
-	"os"
-	"path/filepath"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -25,21 +22,9 @@ type TokenData struct {
 }
 
 // NewTokenStore creates a new -based token store
-func NewTokenStore() (*TokenStore, error) {
-	dataDir := "./data"
-	if err := os.MkdirAll(dataDir, 0700); err != nil {
-		log.Fatalf("Failed to create data directory: %v", err)
-	}
-
-	// Initialize SQLite token store
-	dbPath := filepath.Join(dataDir, "tokens.db")
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
+func NewTokenStore(db *sql.DB) (*TokenStore, error) {
 	// Create tokens table if it doesn't exist
-	_, err = db.Exec(`
+	_, err := db.Exec(`
         CREATE TABLE IF NOT EXISTS tokens (
             agent_id TEXT PRIMARY KEY,
             token TEXT NOT NULL,
@@ -76,9 +61,8 @@ func (s *TokenStore) StoreToken(agentID, token, controllerURL string) error {
 }
 
 // LoadToken retrieves a token from the SQLite database
-func (s *TokenStore) LoadToken() (TokenData, error) {
-	// Retrieve the most recent token
-	row := s.db.QueryRow("SELECT agent_id, token, issued_at, controller_url FROM tokens ORDER BY issued_at DESC LIMIT 1")
+func (s *TokenStore) GetToken(agentID string) (TokenData, error) {
+	row := s.db.QueryRow("SELECT agent_id, token, issued_at, controller_url FROM tokens WHERE agent_id = ?", agentID)
 
 	var data TokenData
 	var issuedAtUnix int64
@@ -86,7 +70,7 @@ func (s *TokenStore) LoadToken() (TokenData, error) {
 	err := row.Scan(&data.AgentID, &data.Token, &issuedAtUnix, &data.ControllerURL)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return TokenData{}, fmt.Errorf("no tokens found, agent not registered")
+			return TokenData{}, fmt.Errorf("no token found for agent: %s", agentID)
 		}
 		return TokenData{}, fmt.Errorf("failed to load token: %w", err)
 	}

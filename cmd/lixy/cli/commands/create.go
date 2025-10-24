@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/MinaroShikuchi/lixy/pkg/client"
+	"github.com/MinaroShikuchi/lixy/internal/client/socket"
 	"github.com/spf13/cobra"
 )
 
@@ -44,9 +44,9 @@ var createDeploymentCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-
+		c := socket.NewControllerClient()
 		// Send create-deployment command to the agent
-		err = createDeployment(name, targetLXC, composeData)
+		err = c.CreateDeployment(name, targetLXC, composeData)
 		if err != nil {
 			return fmt.Errorf("failed to create deployment: %v", err)
 		}
@@ -54,24 +54,6 @@ var createDeploymentCmd = &cobra.Command{
 		fmt.Printf("Deployment %s created successfully on target %s\n", name, targetLXC)
 		return nil
 	},
-}
-
-func createDeployment(name string, targetLXC string, composeData []byte) error {
-	c := client.LyxiClient("/tmp/lixy.sock")
-
-	resp, err := c.SendCommand("create-deployment", map[string]string{
-		"name":         name,
-		"target_lxc":   targetLXC,
-		"compose_yaml": string(composeData),
-	})
-
-	if resp.Success != true {
-		return errors.New("failed to create deployment: " + resp.Message)
-	}
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func init() {

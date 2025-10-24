@@ -2,50 +2,82 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/MinaroShikuchi/lixy/internal/services"
-	"github.com/MinaroShikuchi/lixy/internal/store"
 )
 
 type ControllerCommandHandler struct {
-	Logger     *slog.Logger
-	AgentStore *store.AgentStore
+	logger            *slog.Logger
+	agentService      *services.AgentService
+	deploymentService *services.DeploymentService
+}
+
+func NewControllerCommandHandler(logger *slog.Logger, agentService *services.AgentService, deploymentService *services.DeploymentService) *ControllerCommandHandler {
+	return &ControllerCommandHandler{
+		logger:            logger,
+		agentService:      agentService,
+		deploymentService: deploymentService,
+	}
 }
 
 func (ch *ControllerCommandHandler) HandleCommand(cmd domain.Command) domain.Response {
-	ch.Logger.Info("Handling command", "action", cmd.Action)
+	ch.logger.Info("Handling command", "action", cmd.Action)
+
 	switch cmd.Action {
+	case "register-agent":
+		return ch.handleRegisterAgent(cmd.Params)
 	case "get-deployments":
-		return ch.handleGetDeployments(cmd)
+		return ch.handleGetDeployments(cmd.Params)
 	case "get-deployment":
-		return ch.handleGetDeployment(cmd)
+		return ch.handleGetDeployment(cmd.Params)
 	case "get-targets":
-		return ch.handleGetTargets(cmd)
+		return ch.handleGetTargets(cmd.Params)
 	case "create-deployment":
-		return ch.handleCreateDeployment(cmd)
+		return ch.handleCreateDeployment(cmd.Params)
 	case "delete-deployment":
-		return ch.handleDeleteDeployment(cmd)
+		return ch.handleDeleteDeployment(cmd.Params)
 	default:
 		return domain.Response{Success: false, Message: "Unknown command"}
 	}
 }
 
-// Command-specific handlers
-func (ch *ControllerCommandHandler) handleGetDeployments(cmd domain.Command) domain.Response {
-	// Handle list all deployments
-	deployments := []map[string]string{
-		{"name": "app1", "targetLXC": "101", "status": "running"},
-		{"name": "app2", "targetLXC": "102", "status": "stopped"},
+func (ch *ControllerCommandHandler) handleRegisterAgent(params []byte) domain.Response {
+	var options domain.RegisterAgentOptions
+	if err := json.Unmarshal(params, &options); err != nil {
+		return domain.Response{Success: false, Message: fmt.Sprintf("Invalid parameters for register-agent: %v", err)}
 	}
 
+	// Generate a registration token
+	token, err := services.GenerateRegistrationToken(time.Duration(options.Expiration))
+	if err != nil {
+		ch.logger.Error("Failed to generate registration token", "error", err)
+		return domain.Response{Success: false, Message: "Failed to generate registration token: " + err.Error()}
+	}
+	//TODO: controller url from config
+	return domain.Response{Success: true, Data: map[string]string{"token": token, "controller": "http://localhost:8080"}}
+}
+
+func (ch *ControllerCommandHandler) handleGetDeployments(params []byte) domain.Response {
+	// Handle list all deployments
+	deployments, err := ch.deploymentService.ListAllDeployments()
+	if err != nil {
+		return domain.Response{Success: false, Message: "Failed to list deployments: " + err.Error()}
+	}
 	return domain.Response{Success: true, Data: deployments}
 }
-func (ch *ControllerCommandHandler) handleGetDeployment(cmd domain.Command) domain.Response {
+func (ch *ControllerCommandHandler) handleGetDeployment(options []byte) domain.Response {
+	params := make(map[string]string)
+	err := json.Unmarshal(options, &params)
+	if err != nil {
+		return domain.Response{Success: false, Message: "Failed to unmarshal parameters"}
+	}
 	// Handle get specific deployment
-	name := cmd.Params["name"]
+	name := params["name"]
 	// In a real implementation, look up the deployment by name
 	deployment := map[string]string{
 		"name":      name,
@@ -57,9 +89,9 @@ func (ch *ControllerCommandHandler) handleGetDeployment(cmd domain.Command) doma
 	return domain.Response{Success: true, Data: deployment}
 }
 
-func (ch *ControllerCommandHandler) handleGetTargets(cmd domain.Command) domain.Response {
+func (ch *ControllerCommandHandler) handleGetTargets(params []byte) domain.Response {
 	// Get agents using the agent store
-	agents := ch.AgentStore.ListAgents()
+	agents := ch.agentService.ListAgents()
 	// Convert agents to targets format
 	targets := make([]map[string]string, 0, len(agents))
 	for _, agent := range agents {
@@ -83,15 +115,10 @@ func (ch *ControllerCommandHandler) handleGetTargets(cmd domain.Command) domain.
 	return domain.Response{Success: true, Data: targets}
 }
 
-func (ch *ControllerCommandHandler) handleCreateDeployment(cmd domain.Command) domain.Response {
-	// Extract parameters
-	name := cmd.Params["name"]
-	targetLXC := cmd.Params["target_lxc"]
-	composeYAML := cmd.Params["compose_yaml"]
-
-	// Validate parameters
-	if name == "" || targetLXC == "" || composeYAML == "" {
-		return domain.Response{Success: false, Message: "Missing required parameters"}
+func (ch *ControllerCommandHandler) handleCreateDeployment(paramsRaw []byte) domain.Response {
+	var params domain.CreateDeploymentOptions
+	if err := json.Unmarshal(paramsRaw, &params); err != nil {
+		return domain.Response{Success: false, Message: fmt.Sprintf("Invalid parameters for create-deployment: %v", err)}
 	}
 
 	// // Validate compose file format
@@ -99,37 +126,25 @@ func (ch *ControllerCommandHandler) handleCreateDeployment(cmd domain.Command) d
 	// 	response = domain.Response{Success: false, Message: "Invalid compose file: " + err.Error()}
 	// 	break
 	// }
-
-	err := services.DeployToTarget(name, targetLXC, composeYAML, ch.AgentStore)
+	err := ch.deploymentService.CreateDeployment(params.Name, params.TargetLXC, params.ComposeYML)
 	if err != nil {
 		return domain.Response{Success: false, Message: "Deployment failed: " + err.Error()}
 	}
-	return domain.Response{Success: true, Message: fmt.Sprintf("Deployment %s to target %s initiated", name, targetLXC)}
+	return domain.Response{Success: true, Message: fmt.Sprintf("Deployment %s to target %s created", params.Name, params.TargetLXC)}
 }
 
-func (ch *ControllerCommandHandler) handleDeleteDeployment(cmd domain.Command) domain.Response {
-	// Handle delete deployment
-	name := cmd.Params["name"]
-	targetLXC := cmd.Params["target_lxc"]
-
-	// Validate parameters
-	if name == "" || targetLXC == "" {
-		return domain.Response{Success: false, Message: "Missing required parameters"}
+func (ch *ControllerCommandHandler) handleDeleteDeployment(paramsRaw []byte) domain.Response {
+	var params domain.DeleteDeploymentOptions
+	if err := json.Unmarshal(paramsRaw, &params); err != nil {
+		return domain.Response{Success: false, Message: fmt.Sprintf("Invalid parameters for delete-deployment: %v", err)}
 	}
+	name := params.Name
 	// In a real implementation, delete the deployment by name
-	err := services.DeleteDeployment(name, targetLXC, ch.AgentStore)
+	err := ch.deploymentService.DeleteDeployment(name)
 	if err != nil {
-		ch.Logger.Error("Failed to delete deployment", "name", name, "error", err)
+		ch.logger.Error("Failed to delete deployment", "name", name, "error", err)
 		return domain.Response{Success: false, Message: "Failed to delete deployment: " + err.Error()}
 	}
-	ch.Logger.Info("Deleted deployment", "name", name)
+	ch.logger.Info("Deleted deployment", "name", name)
 	return domain.Response{Success: true, Message: fmt.Sprintf("Deployment %s deleted successfully", name)}
-}
-
-// Other dependencies...
-func NewControllerCommandHandler(logger *slog.Logger, agentStore *store.AgentStore) *ControllerCommandHandler {
-	return &ControllerCommandHandler{
-		Logger:     logger,
-		AgentStore: agentStore,
-	}
 }

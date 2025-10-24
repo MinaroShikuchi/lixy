@@ -6,7 +6,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/MinaroShikuchi/lixy/pkg/client"
+	"github.com/MinaroShikuchi/lixy/internal/client/socket"
 	"github.com/spf13/cobra"
 )
 
@@ -27,7 +27,7 @@ var targetsCmd = &cobra.Command{
 that are managed by the GitOps agent.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get target data from the socket
-		c := client.LyxiClient("/tmp/lixy.sock")
+		c := socket.NewControllerClient()
 
 		targets, err := c.SendCommand("get-targets", nil)
 		if err != nil {

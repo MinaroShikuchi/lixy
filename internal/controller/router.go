@@ -8,23 +8,26 @@ import (
 )
 
 type ControllerRouter struct {
+	agentHandlers *handlers.AgentHandlers
 }
 
 func (ce *ControllerRouter) RegisterRoutes(mux *http.ServeMux) {
-	// Register controller-specific routes
 	// Create authenticated routes
-	authenticatedAPI := http.NewServeMux()
-	// authenticatedAPI.HandleFunc("/api/status", statusHandler)
-	// Add authentication middleware for protected routes
-	mux.Handle("/api/", middlewares.AuthenticateAgent(authenticatedAPI))
+	// authenticatedAPI := http.NewServeMux()
+	// authenticatedAPI.HandleFunc("/api/status", agentHandlers.statusHandler)
+	// mux.Handle("/api/", middlewares.AuthenticateAgent(authenticatedAPI))
 
-	// Add agent registration endpoints
-	mux.HandleFunc("/api/register-agent", handlers.RegisterAgentHandler)
-	mux.HandleFunc("/api/tokens/registration", handlers.GenerateRegistrationTokenHandler)
+	mux.HandleFunc("/api/register-agent", ce.agentHandlers.RegisterAgentHandler)
+	mux.HandleFunc("/api/tokens/registration", ce.agentHandlers.GenerateRegistrationTokenHandler)
+	mux.HandleFunc("/api/unregister-agent", middlewares.AuthMiddleware(ce.agentHandlers.UnregisterAgentHandler))
+	mux.HandleFunc("/api/save-agent", middlewares.AuthMiddleware(ce.agentHandlers.SaveAgentHandler))
 	// Admin routes for listing agents
-	mux.HandleFunc("/admin/agents", handlers.ListAgentsHandler)
+	mux.HandleFunc("/admin/agents", middlewares.AuthMiddleware(ce.agentHandlers.ListAgentsHandler))
+
 }
 
-func NewControllerRouter() *ControllerRouter {
-	return &ControllerRouter{}
+func NewControllerRouter(agentHandlers *handlers.AgentHandlers) *ControllerRouter {
+	return &ControllerRouter{
+		agentHandlers: agentHandlers,
+	}
 }

@@ -10,27 +10,41 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
-	"github.com/MinaroShikuchi/lixy/internal/store"
 )
 
 // Client handles communication with the GitOps agent
 type Client struct {
 	Name            string
 	Version         string
-	Port            string
+	Port            int
 	LogLevel        string
 	ComposeRoot     string
 	SocketPath      string
 	HttpServer      *http.Server
 	sockerListener  net.Listener
 	Logger          *slog.Logger
-	TokenStore      *store.TokenStore
-	AgentStore      *store.AgentStore
 	EndpointHandler domain.EndpointHandler
 	CommandHandler  domain.CommandHandler
+}
+
+// GetSystemInfo returns information about the agent's environment
+func (c *Client) GetSystemInfo() (*domain.SystemInfo, error) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.SystemInfo{
+		Version:  c.Version,
+		OS:       runtime.GOOS,
+		Arch:     runtime.GOARCH,
+		Hostname: hostname,
+		Port:     c.Port,
+	}, nil
 }
 
 func (c *Client) SetupHttpServer() {
@@ -129,9 +143,7 @@ func (c *Client) handleConnection(conn net.Conn) {
 		encoder.Encode(domain.Response{Success: false, Message: "Invalid command format"})
 		return
 	}
-
 	// Use the command handler interface instead of conditionals
 	response := c.CommandHandler.HandleCommand(cmd)
-
 	encoder.Encode(response)
 }

@@ -2,14 +2,15 @@ package middlewares
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
-	"github.com/MinaroShikuchi/lixy/internal/auth"
+	"github.com/MinaroShikuchi/lixy/internal/services"
 )
 
 // Middleware to authenticate API requests
-func AuthenticateAgent(next http.Handler) http.Handler {
+func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Get token from Authorization header
 		authHeader := r.Header.Get("Authorization")
@@ -34,8 +35,9 @@ func AuthenticateAgent(next http.Handler) http.Handler {
 		}
 
 		// Validate token and identify agent
-		agentID, err := auth.ValidateAgentToken(token, remoteIP)
+		agentID, err := services.ValidateAgentToken(token, remoteIP)
 		if err != nil {
+			log.Printf("Unauthorized access attempt from IP %s: %v", remoteIP, err)
 			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 			return
 		}

@@ -17,20 +17,45 @@ Lixy is a lightweight GitOps-inspired system for managing container deployments 
 
 ## Future Feature
 
+- Deployment
+    - get deployment => ok
+    - create deployment => 
+    - update deployment => 
+    - delete deployment => 
+    - retrieve deployment from controller and parse it to execute the tasks =>
+- lixies should have a verbose mode where they are logging the incoming request and the scheduling of their tasks
 - lixies should have a task list to execute so they can do it one by one 
     docker compose pull  => ok 
     docker compose up -d => ok
-- lixies should have a verbose mode where they are logging the incoming request and the scheduling of their tasks
 
 - implement a key value / sqlite to store the version of the container in a deployment
 
-- lixies should not register is there are already registered / unregister workflow
-- lixies get their ip/localhost from params
 - lixies cli should connect through the socket to lixies agent to get the agent info
+- same type for input / ouput in the socket 
+    - lixies // icon validarted
+    - lixy // icon cross 
 
 ## Architecture
 
+You can generate the internal graph import with:
+```
+godepgraph -s ./cmd/lixy/cli | dot -Tpng -o .graph/lixy_cli_v3.png
+godepgraph -s ./cmd/lixies | dot -Tpng -o .graph/lixies_client_v9.png
+```
+
 Lixy follows a controller-agent architecture:
+
+```
+┌─────────────┐          ┌─────────────┐
+│ Controller  │          │    Agent    │
+│    CLI      │          │     CLI     │
+└──────┬──────┘          └──────┬──────┘
+       │ UNIX Socket            │ UNIX Socket
+┌──────▼──────┐  HTTP    ┌──────▼──────┐
+│ Controller  ◄─────────►│    Agent    │
+│   Server    │          │   Server    │
+└─────────────┘          └─────────────┘
+```
 
 ```
 ┌─────────────────┐                 ┌─────────────────┐
@@ -82,8 +107,14 @@ cd lixy
 go build -o lixy ./cmd/lixy
 
 # Set the JWT secret for token signing
+```
 export LIXY_JWT_SECRET=$(openssl rand -base64 32)
 export LIXY_JWT_SECRET=nh91W2iL0wtnxy59EmJ98V4hM7CwGZg6AtjNy/oki9w=
+export GOPATH=/Users/username/go
+export PATH=$GOPATH/bin:$PATH
+export PATH="$PATH:/Applications/Docker.app/Contents/Resources/bin/"
+
+```
 # Start the controller
 ./lixy
 ```
@@ -97,7 +128,7 @@ On each LXC container where you want to run the agent:
 go build -o lixies ./cmd/lixies
 
 # Register with the controller (get a token from controller first)
-./lixies join --token <YOUR_REGISTRATION_TOKEN> --controller http://controller-ip:8080 --name lxc-101
+./lixies register --token <YOUR_REGISTRATION_TOKEN> --controller http://controller-ip:8080 --name lxc-101
 
 # Start the agent service
 sudo cp lixies.service /etc/systemd/system/
@@ -182,20 +213,21 @@ export LIXIES_WORK_DIR="/var/lib/lixies"              # Working directory
 
 ```
 lixy/
+├── README.md
 ├── cmd/                      # Application entry points
-│   ├── lixy/                 # Controller binary
-│       └── cli/              # CLI Controller binary
-│   ├── lixies/               # CLI Agent binary
-│       └── cli/              # CLI Agent binary
-├── internal/                 # Private application code
-│   ├── auth/                 # Authentication logic
-│   ├── controller/           # TODO Rewrite in service /Controller implementation 
-│   ├── handlers/             # Handle function for HTTP server
-│   ├── middlewares/          # Middlewares function for HTTP server
-│   ├── store/                # Data storage implementations
-└── pkg/                      # Public libraries
-    ├── client/               # TODO: To Review
-    └── types/                # TODO: Externalize more type /Shared data types
+│   ├── lixy/                 # Controller (Lixy) binary entrypoints
+│   │   └── cli/              # CLI controller command set
+│   └── lixies/               # Agent (lixies) binary entrypoints
+│       └── cli/              # CLI agent command set
+└── internal/                 # Private application code (not imported by other projects)
+    ├── agent/                # Agent server, routers and handlers
+    ├── auth/                 # Authentication logic and token management
+    ├── client/               # Internal client factory and helpers
+    ├── controller/           # Controller server, routers and handlers (service layer TODO)
+    ├── domain/               # Domain interfaces and core types
+    ├── middlewares/          # HTTP middleware (logging, auth, etc.)
+    ├── services/             # Business logic / service implementations
+    └── store/                # Persistence implementations (sqlite, token/agent stores)
 ```
 
 ## Security

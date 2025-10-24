@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/MinaroShikuchi/lixy/pkg/types"
+	"github.com/MinaroShikuchi/lixy/internal/domain"
 )
 
 func HealthCheckHandler(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
@@ -193,7 +193,7 @@ func UpdateDeploymentHandler(w http.ResponseWriter, r *http.Request, logger *slo
 		return
 	}
 
-	var req types.DeploymentRequest
+	var req domain.DeploymentRequest
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&req); err != nil {
 		logger.Error("Invalid update request", "error", err)
@@ -218,7 +218,7 @@ func UpdateDeploymentHandler(w http.ResponseWriter, r *http.Request, logger *slo
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(types.DeploymentResponse{
+		json.NewEncoder(w).Encode(domain.DeploymentResponse{
 			Success: false,
 			Message: fmt.Sprintf("Failed to update deployment: %v", err),
 		})
@@ -231,7 +231,7 @@ func UpdateDeploymentHandler(w http.ResponseWriter, r *http.Request, logger *slo
 	// Return success response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(types.DeploymentResponse{
+	json.NewEncoder(w).Encode(domain.DeploymentResponse{
 		Success: true,
 		Message: "Deployment updated successfully",
 		Output:  output,

@@ -7,68 +7,50 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/MinaroShikuchi/lixy/internal/store"
-	"github.com/MinaroShikuchi/lixy/pkg/types"
 	"gopkg.in/yaml.v3"
 )
 
-func UpdateDeployment(targetLXC string, composeYAML []byte) error {
-	lixiesEndpoint := fmt.Sprintf("http://%s:8765/deploy", targetLXC)
+type DeploymentService struct {
+	agentStore      *store.AgentStore
+	deploymentStore *store.DeploymentStore
+}
 
-	// Prepare the deployment request
-	deployRequest := types.DeploymentRequest{
-		ComposeYAML: composeYAML,
-		EnvVars: map[string]string{
-			"DEPLOYMENT_ID": "app1",
-		},
+func NewDeploymentService(agentStore *store.AgentStore, deploymentStore *store.DeploymentStore) *DeploymentService {
+	return &DeploymentService{
+		agentStore:      agentStore,
+		deploymentStore: deploymentStore,
 	}
+}
 
-	requestBody, err := json.Marshal(deployRequest)
-	if err != nil {
-		return fmt.Errorf("failed to marshal request: %v", err)
+func (s *DeploymentService) ListAllDeployments() ([]map[string]string, error) {
+
+	deployments := make([]map[string]string, 0)
+	for _, deployment := range s.deploymentStore.ListDeployments() {
+		deployments = append(deployments, map[string]string{
+			"name":      deployment.Name,
+			"targetLXC": deployment.TargetLXC,
+			"status":    deployment.Status,
+		})
 	}
+	return deployments, nil
+}
 
-	// Send request to the lixies agent
-	resp, err := http.Post(lixiesEndpoint, "application/json", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return fmt.Errorf("failed to connect to lixies agent: %v", err)
-	}
-	defer resp.Body.Close()
+func (s *DeploymentService) CreateDeployment(name string, targetLXC string, composeYAML []byte) error {
+	// Update the deployment store
+	s.deploymentStore.AddOrUpdateDeployment(store.DeploymentInfo{
+		Name:      name,
+		TargetLXC: targetLXC,
+		Status:    "running",
+	})
 
-	// Parse response
-	var deployResponse types.DeploymentResponse
-	if err := json.NewDecoder(resp.Body).Decode(&deployResponse); err != nil {
-		return fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	if !deployResponse.Success {
-		return fmt.Errorf("deployment failed: %s", deployResponse.Message)
-	}
-
-	log.Printf("Deployment updated successfully on %s: %s", targetLXC, deployResponse.Output)
 	return nil
 }
 
-func ValidateDeployment(targetLXC string, composeYAML string) error {
-	var composeConfig map[string]interface{}
-
-	err := yaml.Unmarshal([]byte(composeYAML), &composeConfig)
-	if err != nil {
-		return fmt.Errorf("invalid compose file: %v", err)
-	}
-
-	// Check for required sections
-	if _, ok := composeConfig["services"]; !ok {
-		return fmt.Errorf("compose file missing 'services' section")
-	}
-
-	log.Printf("Compose file validated successfully for target %s", targetLXC)
-	return nil
-}
-
-func DeployToTarget(name string, targetLXC string, composeYAML string, agentStore *store.AgentStore) error {
+func (s *DeploymentService) DeployToTarget(name string, targetLXC string, composeYAML string) error {
 	// Get agent information from the store
-	agent, found := agentStore.GetAgent(targetLXC)
+	agent, found := s.agentStore.GetAgent(targetLXC)
 
 	if !found {
 		return fmt.Errorf("agent with ID %s not found", targetLXC)
@@ -78,7 +60,7 @@ func DeployToTarget(name string, targetLXC string, composeYAML string, agentStor
 	deployURL := fmt.Sprintf("http://%s:%d/deploy", agent.IP, agent.Port)
 
 	// Create deployment request payload
-	deploymentRequest := types.DeploymentRequest{
+	deploymentRequest := domain.DeploymentRequest{
 		Name:        name,
 		ComposeYAML: []byte(composeYAML),
 	}
@@ -111,55 +93,70 @@ func DeployToTarget(name string, targetLXC string, composeYAML string, agentStor
 
 }
 
-func DeleteDeployment(name string, targetLXC string, agentStore *store.AgentStore) error {
-	// For now, just log the deletion action
-	log.Printf("Deleting deployment %s from target %s", name, targetLXC)
+func (s *DeploymentService) UpdateDeployment(targetLXC string, composeYAML []byte) error {
+	lixiesEndpoint := fmt.Sprintf("http://%s:8765/deploy", targetLXC)
 
-	agent, found := agentStore.GetAgent(targetLXC)
-
-	if !found {
-		return fmt.Errorf("agent with ID %s not found", targetLXC)
+	// Prepare the deployment request
+	deployRequest := domain.DeploymentRequest{
+		ComposeYAML: composeYAML,
+		EnvVars: map[string]string{
+			"DEPLOYMENT_ID": "app1",
+		},
 	}
 
-	// Construct the deployment endpoint
-	deployURL := fmt.Sprintf("http://%s:%d/deploy", agent.IP, agent.Port)
-
-	// Create delete request payload
-	deleteRequest := types.DeploymentRequest{
-		Name: name,
-	}
-
-	requestBody, err := json.Marshal(deleteRequest)
+	requestBody, err := json.Marshal(deployRequest)
 	if err != nil {
-		return fmt.Errorf("failed to marshal delete request: %v", err)
+		return fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	// Send the delete request to the agent
-	req, err := http.NewRequest(http.MethodDelete, deployURL, bytes.NewBuffer(requestBody))
+	// Send request to the lixies agent
+	resp, err := http.Post(lixiesEndpoint, "application/json", bytes.NewBuffer(requestBody))
 	if err != nil {
-		return fmt.Errorf("failed to create delete request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send delete request: %v", err)
+		return fmt.Errorf("failed to connect to lixies agent: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Check the response status
-	if resp.StatusCode != http.StatusOK {
-		var errorResponse struct {
-			Message string `json:"message"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err != nil {
-			return fmt.Errorf("deletion failed with status %d", resp.StatusCode)
-		}
-		return fmt.Errorf("deletion failed: %s", errorResponse.Message)
+	// Parse response
+	var deployResponse domain.DeploymentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&deployResponse); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	log.Printf("Deployment %s deleted successfully from target %s", name, targetLXC)
+	if !deployResponse.Success {
+		return fmt.Errorf("deployment failed: %s", deployResponse.Message)
+	}
 
+	log.Printf("Deployment updated successfully on %s: %s", targetLXC, deployResponse.Output)
+	return nil
+}
+
+func (s *DeploymentService) ValidateDeployment(targetLXC string, composeYAML string) error {
+	var composeConfig map[string]interface{}
+
+	err := yaml.Unmarshal([]byte(composeYAML), &composeConfig)
+	if err != nil {
+		return fmt.Errorf("invalid compose file: %v", err)
+	}
+
+	// Check for required sections
+	if _, ok := composeConfig["services"]; !ok {
+		return fmt.Errorf("compose file missing 'services' section")
+	}
+
+	log.Printf("Compose file validated successfully for target %s", targetLXC)
+	return nil
+}
+
+// DeleteDeployment removes a deployment from the store
+func (s *DeploymentService) DeleteDeployment(name string) error {
+	// In a real implementation, you would also notify the agent to stop/remove the deployment
+	// For now, we just log the deletion
+	log.Printf("Deleting deployment %s", name)
+
+	err := s.deploymentStore.DeleteDeployment(name)
+	if err != nil {
+		return fmt.Errorf("failed to delete deployment from store: %v", err)
+	}
+	//TODO: to notify the agent to remove the deployment
 	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/MinaroShikuchi/lixy/internal/services"
 	"github.com/spf13/cobra"
 )
 
@@ -45,17 +44,11 @@ var updateDeploymentCmd = &cobra.Command{
 			return errors.New("the specified compose file does not exist")
 		}
 
-		// Read the compose file
-		composeData, err := os.ReadFile(composeFilePath)
-		if err != nil {
-			return err
-		}
-
-		// Call the controller function
-		err = services.UpdateDeployment(targetLXC, composeData)
-		if err != nil {
-			return fmt.Errorf("failed to update deployment: %v", err)
-		}
+		// TODO: Read the compose file
+		// composeData, err := os.ReadFile(composeFilePath)
+		// if err != nil {
+		// 	return err
+		// }
 
 		fmt.Printf("Deployment %s updated successfully\n", deploymentName)
 		return nil

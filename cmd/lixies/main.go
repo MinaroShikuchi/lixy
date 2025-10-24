@@ -13,7 +13,7 @@ import (
 
 func main() {
 
-	c := client.NewAgentClient("0.1.0", "8765", "info")
+	c := client.NewAgentClient("0.1.0", 8765, "info")
 	c.SetupHttpServer()
 	c.SetupSocketServer()
 
