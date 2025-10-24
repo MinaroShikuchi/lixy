@@ -1,4 +1,4 @@
-package auth
+package services
 
 import (
 	"crypto/rand"
@@ -48,8 +48,6 @@ func GenerateRegistrationToken(duration time.Duration) (string, error) {
 	if len(jwtSecret) == 0 {
 		return "", fmt.Errorf("JWT secret not initialized")
 	}
-	fmt.Printf("Signing with JWT secret (base64): %s\n",
-		base64.StdEncoding.EncodeToString(jwtSecret))
 
 	// Implementation for generating secure registration tokens
 	tokenBytes := make([]byte, 32)
@@ -58,8 +56,11 @@ func GenerateRegistrationToken(duration time.Duration) (string, error) {
 	}
 
 	token := hex.EncodeToString(tokenBytes)
-	expirationTime := time.Now().Add(duration)
+	expirationTime := time.Now().Add(duration * time.Second)
+	//debug log
 
+	log.Printf("Generated registration token %s expiring at %s", token, duration)
+	log.Printf("Generated registration token %s expiring at %s", token, expirationTime.String())
 	claims := &jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(expirationTime),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -123,16 +124,19 @@ func ValidateAgentToken(token string, remoteIP string) (string, error) {
 	}
 	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			log.Printf("Token from IP %s has unexpected signing method: %v", remoteIP, token.Header["alg"])
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return jwtSecret, nil
 	})
 
 	if err != nil {
+		log.Printf("Token validation error from IP %s: %v", remoteIP, err)
 		return "", fmt.Errorf("invalid token: %w", err)
 	}
 
 	if !parsedToken.Valid {
+
 		return "", fmt.Errorf("token is not valid")
 	}
 
@@ -142,8 +146,8 @@ func ValidateAgentToken(token string, remoteIP string) (string, error) {
 	}
 
 	// Check if token is for authentication (not registration)
-	if sub, ok := claims["sub"].(string); !ok || sub != "authentication" {
-		return "", fmt.Errorf("invalid token type")
+	if sub, ok := claims["token_type"].(string); !ok || sub != "authentication" {
+		return "", fmt.Errorf("invalid claims: not an authentication token")
 	}
 
 	// Extract and return agent ID from claims

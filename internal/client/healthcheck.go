@@ -16,7 +16,7 @@ type HealthChecker struct {
 }
 
 // NewHealthChecker creates a new health checker
-func NewHealthChecker(agentStore *store.AgentStore, checkInterval time.Duration) *HealthChecker {
+func NewHealthChecker(checkInterval time.Duration, agentStore *store.AgentStore) *HealthChecker {
 	return &HealthChecker{
 		agentStore:    agentStore,
 		checkInterval: checkInterval,

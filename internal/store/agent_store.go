@@ -4,9 +4,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
-	"log"
-	"os"
-	"path/filepath"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -31,22 +29,9 @@ type AgentStore struct {
 	db     *sql.DB // If using a database
 }
 
-func NewAgentStore() (*AgentStore, error) {
-	dataDir := "./data"
-	if err := os.MkdirAll(dataDir, 0700); err != nil {
-		log.Fatalf("Failed to create data directory: %v", err)
-	}
-
-	// Initialize SQLite token store
-	dbPath := filepath.Join(dataDir, "agents.db")
-	// Initialize database connection if using a database
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		return nil, err
-	}
-
+func NewAgentStore(db *sql.DB) (*AgentStore, error) {
 	// Create agents table if not exists
-	_, err = db.Exec(`
+	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS agents (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
@@ -96,6 +81,36 @@ func NewAgentStore() (*AgentStore, error) {
 		mutex:  sync.RWMutex{},
 		db:     db,
 	}, nil
+}
+
+// InsertAgent adds a new agent to the store
+func (s *AgentStore) InsertAgent(agent AgentInfo) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	// Check if agent already exists
+	existing, exists := s.agents[agent.ID]
+	if exists {
+		// Preserve first seen time if agent already exists
+		agent.FirstSeen = existing.FirstSeen
+		return fmt.Errorf("agent with ID %s already exists", agent.ID)
+	}
+	agent.FirstSeen = time.Now()
+	agent.LastSeen = time.Now()
+	// Update in-memory cache
+	s.agents[agent.ID] = agent
+
+	// Serialize maps to JSON for storage
+	capabilitiesJSON, _ := json.Marshal(agent.Capabilities)
+	metadataJSON, _ := json.Marshal(agent.Metadata)
+
+	// Update database
+	_, err := s.db.Exec(
+		"INSERT INTO agents (id, name, ip, port, capabilities, first_seen, last_seen, status, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		agent.ID, agent.Name, agent.IP, agent.Port, string(capabilitiesJSON), agent.FirstSeen.Unix(), agent.LastSeen.Unix(), agent.Status, string(metadataJSON),
+	)
+
+	return err
 }
 
 // UpsertAgent adds or updates agent information
@@ -152,4 +167,21 @@ func (s *AgentStore) ListAgents() []AgentInfo {
 	}
 
 	return agents
+}
+
+// DeleteAgent delete an existing agent from the store
+func (s *AgentStore) DeleteAgent(id string) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	_, exists := s.agents[id]
+	if !exists {
+		return fmt.Errorf("agent with ID %s does not exist", id)
+	}
+	// Remove from in-memory cache
+	delete(s.agents, id)
+
+	// Remove from database
+	_, err := s.db.Exec("DELETE FROM agents WHERE id = ?", id)
+	return err
 }

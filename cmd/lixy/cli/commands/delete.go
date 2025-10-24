@@ -3,7 +3,7 @@ package commands
 import (
 	"fmt"
 
-	"github.com/MinaroShikuchi/lixy/pkg/client"
+	"github.com/MinaroShikuchi/lixy/internal/client/socket"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +17,7 @@ var deleteDeploymentCmd = &cobra.Command{
 	Use:   "deployment [NAME]",
 	Short: "Delete an existing deployment",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := client.LyxiClient("/tmp/lixy.sock")
+		c := socket.NewControllerClient()
 
 		if len(args) < 1 {
 			return nil // Or return an error indicating that the name is required

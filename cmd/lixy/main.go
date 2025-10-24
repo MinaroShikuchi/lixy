@@ -21,7 +21,7 @@ type Config struct {
 func main() {
 
 	// c := client.LixiesHttpClient("Lixy Controller", "0.1.0", 8080, "info", "/tmp/lixy.sock")
-	c := client.NewControllerClient("0.1.0", "8080", "info")
+	c := client.NewControllerClient("0.1.0", 8080, "info")
 	c.SetupHttpServer()
 	c.SetupSocketServer()
 
@@ -47,11 +47,11 @@ func main() {
 	}()
 
 	// Create health checker with 5-minute interval
-	healthChecker := client.NewHealthChecker(c.AgentStore, 5*time.Minute)
+	// healthChecker := client.NewHealthChecker(5 * time.Minute)
 
-	// Start the health checker
-	healthChecker.Start()
-	defer healthChecker.Stop()
+	// // Start the health checker
+	// healthChecker.Start()
+	// defer healthChecker.Stop()
 
 	// Set up graceful shutdown
 	signalCh := make(chan os.Signal, 1)

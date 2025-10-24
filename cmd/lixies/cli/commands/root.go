@@ -13,9 +13,13 @@ func Execute() error {
 }
 
 func init() {
-	joinCmd.Flags().String("token", "", "Registration token from the controller")
-	joinCmd.Flags().String("controller", "", "Controller URL (e.g., http://lixy-controller.example.com:8080)")
-	joinCmd.Flags().String("name", "", "Agent name (defaults to hostname)")
 	// Add subcommands
-	rootCmd.AddCommand(joinCmd)
+	registerCmd.Flags().String("token", "", "Registration token from the controller")
+	registerCmd.Flags().String("controller", "", "Controller URL (e.g., http://lixy-controller.example.com:8080)")
+	registerCmd.Flags().String("name", "", "Agent name (defaults to hostname)")
+
+	unregisterCmd.Flags().String("controller", "", "Controller URL (e.g., http://lixy-controller.example.com:8080)")
+
+	rootCmd.AddCommand(registerCmd)
+	rootCmd.AddCommand(unregisterCmd)
 }

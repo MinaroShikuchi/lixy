@@ -3,7 +3,7 @@ package commands
 import (
 	"fmt"
 
-	"github.com/MinaroShikuchi/lixy/pkg/client"
+	"github.com/MinaroShikuchi/lixy/internal/client/socket"
 	"github.com/spf13/cobra"
 )
 
@@ -12,7 +12,7 @@ var deploymentsCmd = &cobra.Command{
 	Use:   "deployments [NAME]",
 	Short: "List all deployments or get details of a specific deployment",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := client.LyxiClient("/tmp/lixy.sock")
+		c := socket.NewControllerClient()
 
 		// If a name is provided, get details for that specific deployment
 		if len(args) > 0 {

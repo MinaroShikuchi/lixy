@@ -1,5 +1,6 @@
 # Data
 *.db
+.graph/
 
 # macOS
 .DS_Store
