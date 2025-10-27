@@ -75,8 +75,8 @@ func (ch *AgentCommandHandler) registerWithController(controllerURL, registratio
 		return fmt.Errorf("error collecting system info: %w", err)
 	}
 	body := domain.RegistrationRequest{
-		Token:     registrationToken,
-		AgentName: sysInfo.Hostname,
+		Token:    registrationToken,
+		Hostname: sysInfo.Hostname,
 	}
 	reqBody, err := json.Marshal(body)
 
@@ -100,25 +100,20 @@ func (ch *AgentCommandHandler) registerWithController(controllerURL, registratio
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("%s", body)
 	}
-	// Parse response
-	var regResp struct {
-		AgentID string `json:"agent_id"`
-		Token   string `json:"token"`
-	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&regResp); err != nil {
+	var registrationResponse domain.RegistrationResponse
+
+	if err := json.NewDecoder(resp.Body).Decode(&registrationResponse); err != nil {
 		return fmt.Errorf("error parsing registration response: %w", err)
 	}
-	if err := ch.tokenService.CreateToken(regResp.AgentID, regResp.Token, controllerURL); err != nil {
+	if err := ch.tokenService.CreateToken(registrationResponse.Token, controllerURL); err != nil {
 		return fmt.Errorf("error storing permanent token: %w", err)
 	}
 
 	req := domain.SaveAgentRequest{
-		AgentName: sysInfo.Hostname,
-		AgentId:   regResp.AgentID,
-		Version:   sysInfo.Version,
-		IP:        sysInfo.Hostname, // Using hostname as a placeholder for IP
-		Port:      sysInfo.Port,
+		Version: sysInfo.Version,
+		IP:      sysInfo.Hostname, // Using hostname as a placeholder for IP
+		Port:    sysInfo.Port,
 	}
 
 	// Call controller securly endpoint to verify registration
@@ -138,7 +133,7 @@ func (ch *AgentCommandHandler) registerWithController(controllerURL, registratio
 	}
 	verifyReq.Header.Set("Content-Type", "application/json")
 	// Use the token returned by registration to authorize the verification call
-	verifyReq.Header.Set("Authorization", "Bearer "+regResp.Token)
+	verifyReq.Header.Set("Authorization", "Bearer "+registrationResponse.Token)
 
 	client := &http.Client{}
 	verifyResp, err := client.Do(verifyReq)
@@ -152,7 +147,7 @@ func (ch *AgentCommandHandler) registerWithController(controllerURL, registratio
 		return fmt.Errorf("verification failed: %s", body)
 	}
 
-	var verResult domain.Response
+	var verResult domain.SaveAgentResponse
 
 	if err := json.NewDecoder(verifyResp.Body).Decode(&verResult); err != nil {
 		return fmt.Errorf("error parsing verification response: %w", err)
@@ -160,7 +155,9 @@ func (ch *AgentCommandHandler) registerWithController(controllerURL, registratio
 	if !verResult.Success {
 		return fmt.Errorf("controller verification reported failure: %s", verResult.Message)
 	}
-	ch.logger.Info("Controller verification succeeded", "agent_id", regResp.AgentID)
+
+	agentName := verResult.Data["agent_name"]
+	ch.logger.Info("Controller verification succeeded", "agent_name", agentName)
 
 	return nil
 }
@@ -172,17 +169,14 @@ func (ch *AgentCommandHandler) unregisterWithController() error {
 	if err != nil {
 		return fmt.Errorf("error collecting system info: %w", err)
 	}
-	agentId := "agent-" + sysInfo.Hostname
 
 	// Load the stored token for this agent
-	tokenData, err := ch.tokenService.GetToken(agentId)
+	tokenData, err := ch.tokenService.GetToken()
 	if err != nil {
 		return fmt.Errorf("error retrieving stored token: %w", err)
 	}
 
-	body := domain.UnregistrationRequest{
-		AgentName: sysInfo.Hostname,
-	}
+	body := domain.UnregistrationRequest{}
 	reqBody, err := json.Marshal(body)
 
 	if err != nil {

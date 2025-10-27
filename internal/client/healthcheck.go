@@ -53,7 +53,7 @@ func (c *HealthChecker) checkAllAgents() {
 	log.Println("Running health check for all agents...")
 
 	// Get all agents via agentStore
-	agents := c.agentStore.ListAgents()
+	agents := c.agentStore.List()
 
 	// If there are no agents, log a message and return
 	if len(agents) == 0 {

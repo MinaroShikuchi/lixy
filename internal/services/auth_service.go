@@ -83,7 +83,7 @@ func GenerateRegistrationToken(duration time.Duration) (string, error) {
 }
 
 // GeneratePermanentToken creates a long-lived authentication token for an agent
-func GeneratePermanentToken(agentID, agentName string) (string, error) {
+func GeneratePermanentToken(agentName string) (string, error) {
 	// Check if the secret has been initialized
 	if len(jwtSecret) == 0 {
 		return "", fmt.Errorf("JWT secret not initialized")
@@ -95,9 +95,8 @@ func GeneratePermanentToken(agentID, agentName string) (string, error) {
 
 	// Create custom claims with agent information
 	claims := jwt.MapClaims{
-		"sub":        agentID,               // Subject (the entity this token represents)
+		"sub":        "lixies-agent",        // Subject (the entity this token represents)
 		"name":       agentName,             // Agent name for reference
-		"agent_id":   agentID,               // Duplicate for explicitness
 		"iat":        time.Now().Unix(),     // Issued at timestamp
 		"exp":        expirationTime.Unix(), // Expiration time
 		"iss":        "lixy-controller",     // Issuer (your controller)
@@ -151,12 +150,12 @@ func ValidateAgentToken(token string, remoteIP string) (string, error) {
 	}
 
 	// Extract and return agent ID from claims
-	agentID, ok := claims["sub"].(string)
-	if !ok || agentID == "" {
+	agentName, ok := claims["name"].(string)
+	if !ok || agentName == "" {
 		return "", fmt.Errorf("missing agent ID in token")
 	}
 
-	return agentID, nil
+	return agentName, nil
 }
 
 // ValidateRegistrationToken validates a registration token and ensures it hasn't been used

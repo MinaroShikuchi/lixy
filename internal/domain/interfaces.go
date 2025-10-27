@@ -46,22 +46,33 @@ type SystemInfo struct {
 	Port     int    `json:"port"`
 }
 
+// struct for registration response
+type RegistrationResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Token   string `json:"token,omitempty"`
+}
+
 // struct for decoding registration request
 type RegistrationRequest struct {
-	Token     string `json:"token"`
-	AgentName string `json:"agent_name"`
+	Hostname string `json:"hostname"`
+	Token    string `json:"token"`
 }
 
 // struct for decoding registration request
 type UnregistrationRequest struct {
-	AgentName string `json:"agent_name"`
 }
 
 // struct for decoding save agent request
 type SaveAgentRequest struct {
-	AgentName string `json:"agent_name"`
-	AgentId   string `json:"agent_id"`
-	Version   string `json:"version"`
-	IP        string `json:"ip"`
-	Port      int    `json:"port"`
+	Version string `json:"version"`
+	IP      string `json:"ip"`
+	Port    int    `json:"port"`
+}
+
+// struct for decoding save agent response
+type SaveAgentResponse struct {
+	Success bool              `json:"success"`
+	Message string            `json:"message,omitempty"`
+	Data    map[string]string `json:"data,omitempty"`
 }

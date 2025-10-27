@@ -83,21 +83,22 @@ func (ah *AgentHandlers) RegisterAgentHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Generate a new agent ID
-	agentID := generateAgentID(req.AgentName)
-
+	// Generate a new agent name
+	agentName := generateAgentName(req.Hostname)
 	// Generate permanent token for agent
-	permanentToken, err := services.GeneratePermanentToken(agentID, req.AgentName)
+	permanentToken, err := services.GeneratePermanentToken(agentName)
 	if err != nil {
 		http.Error(w, "Failed to generate permanent token", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Generated permanent token for agent ID: %s", agentID)
+	log.Printf("Generated permanent token for agent name: %s", agentName)
 	// Return success with permanent token
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"agent_id": agentID,
-		"token":    permanentToken,
+
+	json.NewEncoder(w).Encode(domain.RegistrationResponse{
+		Success: true,
+		Message: "Agent registered successfully",
+		Token:   permanentToken,
 	})
 }
 
@@ -110,9 +111,9 @@ func (ah *AgentHandlers) UnregisterAgentHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	agentID := r.Context().Value("agent_id").(string)
+	agentName := r.Context().Value("agent_name").(string)
 
-	if err := ah.agentService.DeleteAgent(agentID); err != nil {
+	if err := ah.agentService.DeleteAgent(agentName); err != nil {
 		log.Printf("Error unregistering agent: %v", err)
 		http.Error(w, "Failed to unregister agent", http.StatusInternalServerError)
 		return

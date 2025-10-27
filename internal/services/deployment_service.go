@@ -27,7 +27,7 @@ func NewDeploymentService(agentStore *store.AgentStore, deploymentStore *store.D
 func (s *DeploymentService) ListAllDeployments() ([]map[string]string, error) {
 
 	deployments := make([]map[string]string, 0)
-	for _, deployment := range s.deploymentStore.ListDeployments() {
+	for _, deployment := range s.deploymentStore.List() {
 		deployments = append(deployments, map[string]string{
 			"name":      deployment.Name,
 			"targetLXC": deployment.TargetLXC,
@@ -39,10 +39,11 @@ func (s *DeploymentService) ListAllDeployments() ([]map[string]string, error) {
 
 func (s *DeploymentService) CreateDeployment(name string, targetLXC string, composeYAML []byte) error {
 	// Update the deployment store
-	s.deploymentStore.AddOrUpdateDeployment(store.DeploymentInfo{
-		Name:      name,
-		TargetLXC: targetLXC,
-		Status:    "running",
+	s.deploymentStore.Create(store.DeploymentInfo{
+		Name:       name,
+		TargetLXC:  targetLXC,
+		ComposeYML: composeYAML,
+		Status:     "pending",
 	})
 
 	return nil
@@ -50,7 +51,7 @@ func (s *DeploymentService) CreateDeployment(name string, targetLXC string, comp
 
 func (s *DeploymentService) DeployToTarget(name string, targetLXC string, composeYAML string) error {
 	// Get agent information from the store
-	agent, found := s.agentStore.GetAgent(targetLXC)
+	agent, found := s.agentStore.Get(targetLXC)
 
 	if !found {
 		return fmt.Errorf("agent with ID %s not found", targetLXC)
@@ -153,7 +154,7 @@ func (s *DeploymentService) DeleteDeployment(name string) error {
 	// For now, we just log the deletion
 	log.Printf("Deleting deployment %s", name)
 
-	err := s.deploymentStore.DeleteDeployment(name)
+	err := s.deploymentStore.Delete(name)
 	if err != nil {
 		return fmt.Errorf("failed to delete deployment from store: %v", err)
 	}

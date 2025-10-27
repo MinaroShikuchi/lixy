@@ -38,6 +38,10 @@ func main() {
 		c.StartHttpServer()
 	}()
 
+	// Start the health checker
+	c.Reconciler.Start(ctx)
+	defer c.Reconciler.Stop()
+
 	// Set up graceful shutdown
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)

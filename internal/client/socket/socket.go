@@ -3,6 +3,7 @@ package socket
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 
@@ -51,27 +52,19 @@ func (c *Client) SendCommand(action string, params any) (*domain.Response, error
 
 func (c *Client) CreateDeployment(name string, targetLXC string, composeData []byte) error {
 
-	// params := domain.JoinOptions{
-	// 	Token:      token,
-	// 	Controller: controller,
-	// }
+	params := domain.CreateDeploymentOptions{
+		Name:       name,
+		TargetLXC:  targetLXC,
+		ComposeYML: composeData,
+	}
 
-	// commandBody, err := json.Marshal(params)
-	// if err != nil {
-	// 	return err
-	// }
+	resp, err := c.SendCommand("create-deployment", params)
 
-	// resp, err := c.SendCommand("create-deployment", map[string]string{
-	// 	"name":         name,
-	// 	"target_lxc":   targetLXC,
-	// 	"compose_yaml": string(composeData),
-	// })
-
-	// if !resp.Success {
-	// 	return errors.New("failed to create deployment: " + resp.Message)
-	// }
-	// if err != nil {
-	// 	return err
-	// }
+	if !resp.Success {
+		return errors.New("failed to create deployment: " + resp.Message)
+	}
+	if err != nil {
+		return err
+	}
 	return nil
 }

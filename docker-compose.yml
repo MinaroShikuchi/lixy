@@ -1,0 +1,8 @@
+version: '3.8'
+services:
+  test:
+    image: docker/welcome-to-docker:latest
+    container_name: welcome-to-docker
+    ports:
+      - "8081:80"
+    restart: unless-stopped

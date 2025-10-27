@@ -8,7 +8,8 @@ import (
 )
 
 type ControllerRouter struct {
-	agentHandlers *handlers.AgentHandlers
+	agentHandlers      *handlers.AgentHandlers
+	deploymentHandlers *handlers.DeploymentHandlers
 }
 
 func (ce *ControllerRouter) RegisterRoutes(mux *http.ServeMux) {
@@ -21,13 +22,15 @@ func (ce *ControllerRouter) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/tokens/registration", ce.agentHandlers.GenerateRegistrationTokenHandler)
 	mux.HandleFunc("/api/unregister-agent", middlewares.AuthMiddleware(ce.agentHandlers.UnregisterAgentHandler))
 	mux.HandleFunc("/api/save-agent", middlewares.AuthMiddleware(ce.agentHandlers.SaveAgentHandler))
+	mux.HandleFunc("/api/deployments", middlewares.AuthMiddleware(ce.deploymentHandlers.ListDeploymentsHandler))
 	// Admin routes for listing agents
 	mux.HandleFunc("/admin/agents", middlewares.AuthMiddleware(ce.agentHandlers.ListAgentsHandler))
 
 }
 
-func NewControllerRouter(agentHandlers *handlers.AgentHandlers) *ControllerRouter {
+func NewControllerRouter(agentHandlers *handlers.AgentHandlers, deploymentHandlers *handlers.DeploymentHandlers) *ControllerRouter {
 	return &ControllerRouter{
-		agentHandlers: agentHandlers,
+		agentHandlers:      agentHandlers,
+		deploymentHandlers: deploymentHandlers,
 	}
 }
