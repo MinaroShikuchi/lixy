@@ -46,12 +46,9 @@ func main() {
 		c.StartHttpServer()
 	}()
 
-	// Create health checker with 5-minute interval
-	// healthChecker := client.NewHealthChecker(5 * time.Minute)
-
-	// // Start the health checker
-	// healthChecker.Start()
-	// defer healthChecker.Stop()
+	// Start the health checker
+	c.HealthChecker.Start()
+	defer c.HealthChecker.Stop()
 
 	// Set up graceful shutdown
 	signalCh := make(chan os.Signal, 1)

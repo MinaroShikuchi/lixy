@@ -2,6 +2,7 @@ package client
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/MinaroShikuchi/lixy/internal/agent"
 	"github.com/MinaroShikuchi/lixy/internal/controller"
@@ -46,6 +47,12 @@ func NewControllerClient(version string, port int, logLevel string) *Client {
 		logger.Error("Failed to open database", "error", err)
 		return nil
 	}
+	// Enable foreign key enforcement for SQLite
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		db.Close()
+		logger.Error("Failed to enable foreign keys", "error", err)
+		return nil
+	}
 
 	// Initialize token store
 	// tokenStore, err := store.NewTokenStore()
@@ -69,7 +76,11 @@ func NewControllerClient(version string, port int, logLevel string) *Client {
 	client.CommandHandler = controller.NewControllerCommandHandler(client.Logger, agentService, deploymentService)
 	// Initialize endpoint handler
 	agentHandlers := handlers.NewAgentHandlers(agentService)
-	client.EndpointHandler = controller.NewControllerRouter(agentHandlers)
+	deploymentHandlers := handlers.NewDeploymentHandlers(deploymentService)
+	client.EndpointHandler = controller.NewControllerRouter(agentHandlers, deploymentHandlers)
+
+	client.HealthChecker = NewHealthChecker(5*time.Minute, agentStore)
+
 	return client
 
 }
@@ -106,7 +117,7 @@ func NewAgentClient(version string, port int, logLevel string) *Client {
 	client.CommandHandler = agent.NewAgentCommandHandler(client.Logger, tokenService, client.GetSystemInfo)
 	// Initialize endpoint handler
 	client.EndpointHandler = agent.NewAgentRouter()
-
+	client.Reconciler = NewDeploymentReconciler(logger, 30*time.Second, tokenService)
 	return client
 
 }

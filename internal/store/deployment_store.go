@@ -6,15 +6,17 @@ import (
 	"log"
 	"sync"
 
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 // DeploymentInfo represents information about a deployment with docker compose
 type DeploymentInfo struct {
-	ID        int64
-	Name      string
-	TargetLXC string
-	Status    string
+	ID         string
+	Name       string
+	TargetLXC  string
+	ComposeYML []byte
+	Status     string
 }
 
 // DeploymentStore manages deployments persisted in SQLite
@@ -26,21 +28,16 @@ type DeploymentStore struct {
 
 // NewDeploymentStore creates a new DeploymentStore backed by SQLite
 func NewDeploymentStore(db *sql.DB) (*DeploymentStore, error) {
-	// Enable foreign key enforcement for SQLite
-	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
-	}
-
 	// Create deployments table with foreign key constraint on target_lxc
 	// Note: this references the lxc_targets table — ensure that table exists with a "name" column.
 	_, err := db.Exec(`
         CREATE TABLE IF NOT EXISTS deployments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id TEXT PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
             target_lxc TEXT NOT NULL,
+            compose_yml TEXT NOT NULL,
             status TEXT NOT NULL,
-            FOREIGN KEY (target_lxc) REFERENCES lxc_targets(name) ON DELETE RESTRICT ON UPDATE CASCADE
+            FOREIGN KEY (target_lxc) REFERENCES agents(name) ON DELETE RESTRICT ON UPDATE CASCADE
         )
     `)
 	if err != nil {
@@ -75,7 +72,7 @@ func NewDeploymentStore(db *sql.DB) (*DeploymentStore, error) {
 }
 
 // ListDeployments returns all deployments from the DB
-func (ds *DeploymentStore) ListDeployments() []DeploymentInfo {
+func (ds *DeploymentStore) List() []DeploymentInfo {
 	if ds == nil || ds.db == nil {
 		log.Printf("ListDeployments: deployment store or database is nil")
 		return nil
@@ -106,7 +103,7 @@ func (ds *DeploymentStore) ListDeployments() []DeploymentInfo {
 }
 
 // GetDeployment retrieves a deployment by name
-func (ds *DeploymentStore) GetDeployment(name string) (DeploymentInfo, bool) {
+func (ds *DeploymentStore) Get(name string) (DeploymentInfo, bool) {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
@@ -124,7 +121,7 @@ func (ds *DeploymentStore) GetDeployment(name string) (DeploymentInfo, bool) {
 }
 
 // AddOrUpdateDeployment adds or updates a deployment in the DB
-func (ds *DeploymentStore) AddOrUpdateDeployment(deployment DeploymentInfo) {
+func (ds *DeploymentStore) Create(deployment DeploymentInfo) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
@@ -143,22 +140,24 @@ func (ds *DeploymentStore) AddOrUpdateDeployment(deployment DeploymentInfo) {
 	if ra > 0 {
 		return
 	}
+	//debug log deployment
+	log.Printf("Inserting deployment: Name=%s, TargetLXC=%s, Status=%s", deployment.Name, deployment.TargetLXC, deployment.Status)
 
+	id := uuid.New().String()
 	// Insert if update didn't affect any row
-	res, err = ds.db.Exec(`INSERT INTO deployments (name, target_lxc, status) VALUES (?, ?, ?)`,
-		deployment.Name, deployment.TargetLXC, deployment.Status)
+	res, err = ds.db.Exec(`INSERT INTO deployments (id, name, target_lxc, compose_yml, status) VALUES (?, ?, ?, ?, ?)`,
+		id, deployment.Name, deployment.TargetLXC, deployment.ComposeYML, deployment.Status)
 	if err != nil {
 		log.Printf("AddOrUpdateDeployment insert error: %v", err)
 		return
 	}
-	id, err := res.LastInsertId()
 	if err == nil {
 		deployment.ID = id
 	}
 }
 
-// DeleteDeployment removes a deployment by name from the DB
-func (ds *DeploymentStore) DeleteDeployment(name string) error {
+// Removes a deployment by name from the DB
+func (ds *DeploymentStore) Delete(name string) error {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 

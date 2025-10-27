@@ -19,10 +19,11 @@ Lixy is a lightweight GitOps-inspired system for managing container deployments 
 
 - Deployment
     - get deployment => ok
-    - create deployment => 
+    - create deployment => ok
     - update deployment => 
     - delete deployment => 
     - retrieve deployment from controller and parse it to execute the tasks =>
+- lixies should have a client that set their token in headers
 - lixies should have a verbose mode where they are logging the incoming request and the scheduling of their tasks
 - lixies should have a task list to execute so they can do it one by one 
     docker compose pull  => ok 
@@ -32,7 +33,7 @@ Lixy is a lightweight GitOps-inspired system for managing container deployments 
 
 - lixies cli should connect through the socket to lixies agent to get the agent info
 - same type for input / ouput in the socket 
-    - lixies // icon validarted
+    - lixies // icon validared
     - lixy // icon cross 
 
 ## Architecture

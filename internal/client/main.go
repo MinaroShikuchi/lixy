@@ -29,6 +29,8 @@ type Client struct {
 	Logger          *slog.Logger
 	EndpointHandler domain.EndpointHandler
 	CommandHandler  domain.CommandHandler
+	HealthChecker   *HealthChecker
+	Reconciler      *DeploymentReconciler
 }
 
 // GetSystemInfo returns information about the agent's environment

@@ -12,9 +12,9 @@ func NewTokenService(tokenStore *store.TokenStore) *TokenService {
 	}
 }
 
-func (s *TokenService) GetToken(agentID string) (store.TokenData, error) {
-	return s.tokenStore.GetToken(agentID)
+func (s *TokenService) GetToken() (store.TokenData, error) {
+	return s.tokenStore.Get()
 }
-func (s *TokenService) CreateToken(agentID, token, controllerURL string) error {
-	return s.tokenStore.StoreToken(agentID, token, controllerURL)
+func (s *TokenService) CreateToken(token, controllerURL string) error {
+	return s.tokenStore.Create(token, controllerURL)
 }

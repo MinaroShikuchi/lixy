@@ -24,9 +24,8 @@ func (ah *AgentHandlers) SaveAgentHandler(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Invalid request format", http.StatusBadRequest)
 		return
 	}
-	agentID := r.Context().Value("agent_id").(string)
-
-	if err := ah.agentService.CreateAgent(agentID, req.AgentName, req.IP, req.Port); err != nil {
+	agentName := r.Context().Value("agent_name").(string)
+	if err := ah.agentService.CreateAgent(agentName, req.IP, req.Port); err != nil {
 		log.Printf("Error saving agent info: %v", err)
 		http.Error(w, "Failed to save agent information", http.StatusInternalServerError)
 		return
@@ -34,19 +33,20 @@ func (ah *AgentHandlers) SaveAgentHandler(w http.ResponseWriter, r *http.Request
 
 	// Return success with permanent token
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Location", fmt.Sprintf("/agents/%s", agentID))
+	w.Header().Set("Location", fmt.Sprintf("/agents/%s", agentName))
 	w.WriteHeader(http.StatusCreated)
 
-	resp := domain.Response{
+	resp := domain.SaveAgentResponse{
 		Success: true,
 		Message: "Agent registered successfully",
+		Data:    map[string]string{"agent_name": agentName},
 	}
 
 	json.NewEncoder(w).Encode(resp)
 }
 
-// Helper function to generate a unique agent ID
-func generateAgentID(hostname string) string {
+// Helper function to generate a unique agent name
+func generateAgentName(hostname string) string {
 	return fmt.Sprintf("agent-%s", hostname)
 }
 

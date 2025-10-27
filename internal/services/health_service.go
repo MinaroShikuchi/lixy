@@ -24,7 +24,7 @@ func CheckAgentHealth(agent store.AgentInfo, agentStore *store.AgentStore) (bool
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	// Build the health check URL
-	fmt.Printf("Checking health of agent %s at %s:%d\n", agent.ID, agent.IP, agent.Port)
+	// fmt.Printf("Checking health of agent %s at %s:%d\n", agent.ID, agent.IP, agent.Port)
 	healthURL := fmt.Sprintf("http://%s:%d/healthz", agent.IP, agent.Port)
 
 	// Create HTTP client with timeout
@@ -39,7 +39,7 @@ func CheckAgentHealth(agent store.AgentInfo, agentStore *store.AgentStore) (bool
 		agent.Status = "unreachable"
 		agent.Metadata["health_message"] = fmt.Sprintf("Failed to create request: %v", err)
 		agent.LastSeen = time.Now()
-		agentStore.UpsertAgent(agent)
+		agentStore.Upsert(agent)
 
 		return false, fmt.Sprintf("Failed to create request: %v", err)
 	}
@@ -51,7 +51,7 @@ func CheckAgentHealth(agent store.AgentInfo, agentStore *store.AgentStore) (bool
 		agent.Status = "offline"
 		agent.Metadata["health_message"] = fmt.Sprintf("Failed to connect: %v", err)
 		agent.LastSeen = time.Now()
-		agentStore.UpsertAgent(agent)
+		agentStore.Upsert(agent)
 
 		return false, fmt.Sprintf("Failed to connect: %v", err)
 	}
@@ -63,7 +63,7 @@ func CheckAgentHealth(agent store.AgentInfo, agentStore *store.AgentStore) (bool
 		agent.Status = "degraded"
 		agent.Metadata["health_message"] = fmt.Sprintf("Unhealthy status code: %d", resp.StatusCode)
 		agent.LastSeen = time.Now()
-		agentStore.UpsertAgent(agent)
+		agentStore.Upsert(agent)
 
 		return false, fmt.Sprintf("Unhealthy status code: %d", resp.StatusCode)
 	}
@@ -74,7 +74,7 @@ func CheckAgentHealth(agent store.AgentInfo, agentStore *store.AgentStore) (bool
 		agent.Status = "degraded"
 		agent.Metadata["health_message"] = fmt.Sprintf("Invalid response format: %v", err)
 		agent.LastSeen = time.Now()
-		agentStore.UpsertAgent(agent)
+		agentStore.Upsert(agent)
 
 		return false, fmt.Sprintf("Invalid response format: %v", err)
 	}
@@ -84,14 +84,14 @@ func CheckAgentHealth(agent store.AgentInfo, agentStore *store.AgentStore) (bool
 		agent.Status = "online"
 		agent.Metadata["health_message"] = result.Message
 		agent.LastSeen = time.Now()
-		agentStore.UpsertAgent(agent)
+		agentStore.Upsert(agent)
 
 		return true, result.Message
 	} else {
 		agent.Status = "degraded"
 		agent.Metadata["health_message"] = result.Message
 		agent.LastSeen = time.Now()
-		agentStore.UpsertAgent(agent)
+		agentStore.Upsert(agent)
 
 		return false, result.Message
 	}

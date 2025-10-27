@@ -76,17 +76,12 @@ func (ch *ControllerCommandHandler) handleGetDeployment(options []byte) domain.R
 	if err != nil {
 		return domain.Response{Success: false, Message: "Failed to unmarshal parameters"}
 	}
-	// Handle get specific deployment
-	name := params["name"]
-	// In a real implementation, look up the deployment by name
-	deployment := map[string]string{
-		"name":      name,
-		"targetLXC": "101",
-		"status":    "running",
-		"image":     "my-app:latest",
-		"created":   "2023-01-01 12:00:00",
+	deployments, err := ch.deploymentService.ListAllDeployments()
+	if err != nil {
+		return domain.Response{Success: false, Message: "Failed to list deployments: " + err.Error()}
 	}
-	return domain.Response{Success: true, Data: deployment}
+
+	return domain.Response{Success: true, Data: deployments}
 }
 
 func (ch *ControllerCommandHandler) handleGetTargets(params []byte) domain.Response {

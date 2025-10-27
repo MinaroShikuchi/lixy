@@ -13,21 +13,20 @@ func NewAgentService(agentStore *store.AgentStore) *AgentService {
 }
 
 func (s *AgentService) ListAgents() []store.AgentInfo {
-	return s.agentStore.ListAgents()
+	return s.agentStore.List()
 }
 
-func (s *AgentService) CreateAgent(agentID, agentName, ip string, port int) error {
+func (s *AgentService) CreateAgent(agentName, ip string, port int) error {
 	agent := store.AgentInfo{
-		ID:       agentID,
 		Name:     agentName,
 		IP:       ip,
 		Port:     port,
 		Status:   "online",
 		Metadata: map[string]string{}, // Can be populated from more claims if needed
 	}
-	return s.agentStore.InsertAgent(agent)
+	return s.agentStore.Create(agent)
 }
 
-func (s *AgentService) DeleteAgent(agentID string) error {
-	return s.agentStore.DeleteAgent(agentID)
+func (s *AgentService) DeleteAgent(agentName string) error {
+	return s.agentStore.Delete(agentName)
 }
