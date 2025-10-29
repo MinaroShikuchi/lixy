@@ -17,24 +17,14 @@ Lixy is a lightweight GitOps-inspired system for managing container deployments 
 
 ## Future Feature
 
-- Deployment
-    - get deployment => ok
-    - create deployment => ok
-    - update deployment => 
-    - delete deployment => 
-    - retrieve deployment from controller and parse it to execute the tasks =>
-- lixies should have a client that set their token in headers
-- lixies should have a verbose mode where they are logging the incoming request and the scheduling of their tasks
-- lixies should have a task list to execute so they can do it one by one 
+- [ ] Clean commands controller, command structure + command options interfaces
+- [ ] Retrieve deployment from controller and parse it to execute the tasks
+- [ ] Lixies should have a client that set their token in headers
+- [ ] Clean logs, debug mode
+- [ ] Lixies should have a task list to execute docker command.
     docker compose pull  => ok 
     docker compose up -d => ok
-
-- implement a key value / sqlite to store the version of the container in a deployment
-
-- lixies cli should connect through the socket to lixies agent to get the agent info
-- same type for input / ouput in the socket 
-    - lixies // icon validared
-    - lixy // icon cross 
+- lixies cli should connect through the socket to lixies agent to get the agent info 
 
 ## Architecture
 
@@ -108,12 +98,12 @@ cd lixy
 go build -o lixy ./cmd/lixy
 
 # Set the JWT secret for token signing
-```
 export LIXY_JWT_SECRET=$(openssl rand -base64 32)
 export LIXY_JWT_SECRET=nh91W2iL0wtnxy59EmJ98V4hM7CwGZg6AtjNy/oki9w=
 export GOPATH=/Users/username/go
 export PATH=$GOPATH/bin:$PATH
 export PATH="$PATH:/Applications/Docker.app/Contents/Resources/bin/"
+```
 
 ```
 # Start the controller

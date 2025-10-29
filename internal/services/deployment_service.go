@@ -24,14 +24,18 @@ func NewDeploymentService(agentStore *store.AgentStore, deploymentStore *store.D
 	}
 }
 
-func (s *DeploymentService) ListAllDeployments() ([]map[string]string, error) {
-
-	deployments := make([]map[string]string, 0)
-	for _, deployment := range s.deploymentStore.List() {
-		deployments = append(deployments, map[string]string{
-			"name":      deployment.Name,
-			"targetLXC": deployment.TargetLXC,
-			"status":    deployment.Status,
+func (s *DeploymentService) ListAllDeployments(targetLXC string) ([]domain.DeploymentDto, error) {
+	deployments := make([]domain.DeploymentDto, 0)
+	for _, d := range s.deploymentStore.List() {
+		if targetLXC != "" && d.TargetLXC != targetLXC {
+			continue
+		}
+		deployments = append(deployments, domain.DeploymentDto{
+			ID:          d.ID,
+			Name:        d.Name,
+			TargetLXC:   d.TargetLXC,
+			Status:      d.Status,
+			ComposeYAML: d.ComposeYAML,
 		})
 	}
 	return deployments, nil
@@ -39,12 +43,19 @@ func (s *DeploymentService) ListAllDeployments() ([]map[string]string, error) {
 
 func (s *DeploymentService) CreateDeployment(name string, targetLXC string, composeYAML []byte) error {
 	// Update the deployment store
-	s.deploymentStore.Create(store.DeploymentInfo{
-		Name:       name,
-		TargetLXC:  targetLXC,
-		ComposeYML: composeYAML,
-		Status:     "pending",
+	if _, exists := s.deploymentStore.Get(name); exists {
+		return fmt.Errorf("deployment with name '%s' already exists", name)
+	}
+
+	err := s.deploymentStore.Create(store.DeploymentInfo{
+		Name:        name,
+		TargetLXC:   targetLXC,
+		ComposeYAML: composeYAML,
+		Status:      "pending",
 	})
+	if err != nil {
+		return fmt.Errorf("%v", err)
+	}
 
 	return nil
 }
@@ -94,40 +105,39 @@ func (s *DeploymentService) DeployToTarget(name string, targetLXC string, compos
 
 }
 
-func (s *DeploymentService) UpdateDeployment(targetLXC string, composeYAML []byte) error {
-	lixiesEndpoint := fmt.Sprintf("http://%s:8765/deploy", targetLXC)
-
-	// Prepare the deployment request
-	deployRequest := domain.DeploymentRequest{
-		ComposeYAML: composeYAML,
-		EnvVars: map[string]string{
-			"DEPLOYMENT_ID": "app1",
-		},
+func (s *DeploymentService) UpdateDeployment(name string, composeYAML []byte) error {
+	if deployment, exists := s.deploymentStore.Get(name); exists {
+		err := s.deploymentStore.Update(store.DeploymentInfo{
+			Name:        name,
+			TargetLXC:   deployment.TargetLXC,
+			ComposeYAML: composeYAML,
+			Status:      "pending",
+		})
+		if err != nil {
+			return fmt.Errorf("failed to update deployment: %v", err)
+		}
+	} else {
+		return fmt.Errorf("deployment with name '%s' does not exist", name)
 	}
 
-	requestBody, err := json.Marshal(deployRequest)
-	if err != nil {
-		return fmt.Errorf("failed to marshal request: %v", err)
+	return nil
+}
+
+func (s *DeploymentService) UpdateDeploymentStatus(name, status string) error {
+	if deployment, exists := s.deploymentStore.Get(name); exists {
+		err := s.deploymentStore.Update(store.DeploymentInfo{
+			Name:        name,
+			TargetLXC:   deployment.TargetLXC,
+			ComposeYAML: deployment.ComposeYAML,
+			Status:      status,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to update deployment status: %v", err)
+		}
+	} else {
+		return fmt.Errorf("deployment with name '%s' does not exist", name)
 	}
 
-	// Send request to the lixies agent
-	resp, err := http.Post(lixiesEndpoint, "application/json", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return fmt.Errorf("failed to connect to lixies agent: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Parse response
-	var deployResponse domain.DeploymentResponse
-	if err := json.NewDecoder(resp.Body).Decode(&deployResponse); err != nil {
-		return fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	if !deployResponse.Success {
-		return fmt.Errorf("deployment failed: %s", deployResponse.Message)
-	}
-
-	log.Printf("Deployment updated successfully on %s: %s", targetLXC, deployResponse.Output)
 	return nil
 }
 
@@ -150,14 +160,14 @@ func (s *DeploymentService) ValidateDeployment(targetLXC string, composeYAML str
 
 // DeleteDeployment removes a deployment from the store
 func (s *DeploymentService) DeleteDeployment(name string) error {
-	// In a real implementation, you would also notify the agent to stop/remove the deployment
-	// For now, we just log the deletion
-	log.Printf("Deleting deployment %s", name)
+	if _, exists := s.deploymentStore.Get(name); !exists {
+		return fmt.Errorf("deployment with name '%s' does not exist", name)
+	}
 
 	err := s.deploymentStore.Delete(name)
 	if err != nil {
-		return fmt.Errorf("failed to delete deployment from store: %v", err)
+		return fmt.Errorf("failed to delete deployment: %v", err)
 	}
-	//TODO: to notify the agent to remove the deployment
+
 	return nil
 }

@@ -26,6 +26,25 @@ func (c *ControllerClient) DeployApplication(name string, yaml []byte) (*domain.
 	})
 }
 
+func (c *Client) CreateDeployment(name string, targetLXC string, composeData []byte) error {
+
+	params := domain.CreateDeploymentOptions{
+		Name:        name,
+		TargetLXC:   targetLXC,
+		ComposeYAML: composeData,
+	}
+
+	resp, err := c.SendCommand("create-deployment", params)
+
+	if !resp.Success {
+		return fmt.Errorf("command failed: %s", resp.Message)
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // ListDeployments fetches the list of deployments
 func (c *Client) ListDeployments() ([]map[string]interface{}, error) {
 	resp, err := c.SendCommand("list", nil)
@@ -98,4 +117,22 @@ func (c *Client) GetDeployment(name string) (map[string]interface{}, error) {
 	}
 
 	return deployment, nil
+}
+
+func (c *Client) UpdateDeployment(name string, composeYAML []byte) error {
+	params := map[string]interface{}{
+		"name":        name,
+		"compose_yml": composeYAML,
+	}
+
+	resp, err := c.SendCommand("update-deployment", params)
+	if err != nil {
+		return err
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("command failed: %s", resp.Message)
+	}
+
+	return nil
 }

@@ -16,8 +16,9 @@ var createCmd = &cobra.Command{
 }
 
 var createDeploymentCmd = &cobra.Command{
-	Use:   "deployment [NAME]",
-	Short: "Create a new deployment",
+	Use:          "deployment [NAME]",
+	Short:        "Create a new deployment",
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 1 {
 			return errors.New("deployment name is required")

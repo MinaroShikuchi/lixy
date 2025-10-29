@@ -14,8 +14,9 @@ var deleteCmd = &cobra.Command{
 }
 
 var deleteDeploymentCmd = &cobra.Command{
-	Use:   "deployment [NAME]",
-	Short: "Delete an existing deployment",
+	Use:          "deployment [NAME]",
+	Short:        "Delete an existing deployment",
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := socket.NewControllerClient()
 
