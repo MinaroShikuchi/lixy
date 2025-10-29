@@ -21,7 +21,7 @@ type Config struct {
 func main() {
 
 	// c := client.LixiesHttpClient("Lixy Controller", "0.1.0", 8080, "info", "/tmp/lixy.sock")
-	c := client.NewControllerClient("0.1.0", 8080, "info")
+	c := client.NewControllerClient(Version, 8080, "info")
 	c.SetupHttpServer()
 	c.SetupSocketServer()
 
