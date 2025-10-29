@@ -22,7 +22,7 @@ jobs:
         include:
           - os: linux
             arch: amd64
-          - os: linux
+          - os: darwin
             arch: arm64
     outputs:
       artifact-path: ${{ steps.package.outputs.path || '' }}
