@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/MinaroShikuchi/lixy/internal/client/socket"
 	"github.com/spf13/cobra"
 )
 
@@ -24,19 +25,14 @@ var updateDeploymentCmd = &cobra.Command{
 			return fmt.Errorf("deployment name is required")
 		}
 
-		deploymentName := args[0]
+		name := args[0]
 
 		// Get the compose file path flag
 		composeFilePath, _ := cmd.Flags().GetString("compose-file")
-		targetLXC, _ := cmd.Flags().GetString("target-lxc")
 
 		// Validate required flags
 		if composeFilePath == "" {
 			return fmt.Errorf("--compose-file flag is required")
-		}
-
-		if targetLXC == "" {
-			return fmt.Errorf("--target-lxc flag is required")
 		}
 
 		// Validate file exists
@@ -44,13 +40,19 @@ var updateDeploymentCmd = &cobra.Command{
 			return errors.New("the specified compose file does not exist")
 		}
 
-		// TODO: Read the compose file
-		// composeData, err := os.ReadFile(composeFilePath)
-		// if err != nil {
-		// 	return err
-		// }
+		// Read the compose file
+		composeData, err := os.ReadFile(composeFilePath)
+		if err != nil {
+			return err
+		}
+		c := socket.NewControllerClient()
+		// Send create-deployment command to the agent
+		err = c.UpdateDeployment(name, composeData)
+		if err != nil {
+			return fmt.Errorf("failed to update deployment: %v", err)
+		}
 
-		fmt.Printf("Deployment %s updated successfully\n", deploymentName)
+		fmt.Printf("Deployment %s updated successfully\n", name)
 		return nil
 	},
 }
@@ -60,9 +62,7 @@ func init() {
 
 	// Configure flags
 	updateDeploymentCmd.Flags().String("compose-file", "", "Path to updated Docker Compose file")
-	updateDeploymentCmd.Flags().String("target-lxc", "", "Target LXC container ID")
 
 	// Mark required flags
 	updateDeploymentCmd.MarkFlagRequired("compose-file")
-	updateDeploymentCmd.MarkFlagRequired("target-lxc")
 }

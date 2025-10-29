@@ -21,10 +21,6 @@ var registerAgentCmd = &cobra.Command{
 
 		c := socket.NewControllerClient()
 
-		// debug
-		fmt.Printf("Expiration: %s\n", expiration.String())
-		fmt.Printf("Expiration: %d\n", int64(expiration.Seconds()))
-
 		params := domain.RegisterAgentOptions{
 			Expiration: int(expiration.Seconds()),
 		}

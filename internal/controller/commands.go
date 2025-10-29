@@ -39,6 +39,8 @@ func (ch *ControllerCommandHandler) HandleCommand(cmd domain.Command) domain.Res
 		return ch.handleGetTargets(cmd.Params)
 	case "create-deployment":
 		return ch.handleCreateDeployment(cmd.Params)
+	case "update-deployment":
+		return ch.handleUpdateDeployment(cmd.Params)
 	case "delete-deployment":
 		return ch.handleDeleteDeployment(cmd.Params)
 	default:
@@ -64,7 +66,7 @@ func (ch *ControllerCommandHandler) handleRegisterAgent(params []byte) domain.Re
 
 func (ch *ControllerCommandHandler) handleGetDeployments(params []byte) domain.Response {
 	// Handle list all deployments
-	deployments, err := ch.deploymentService.ListAllDeployments()
+	deployments, err := ch.deploymentService.ListAllDeployments("")
 	if err != nil {
 		return domain.Response{Success: false, Message: "Failed to list deployments: " + err.Error()}
 	}
@@ -76,7 +78,7 @@ func (ch *ControllerCommandHandler) handleGetDeployment(options []byte) domain.R
 	if err != nil {
 		return domain.Response{Success: false, Message: "Failed to unmarshal parameters"}
 	}
-	deployments, err := ch.deploymentService.ListAllDeployments()
+	deployments, err := ch.deploymentService.ListAllDeployments("")
 	if err != nil {
 		return domain.Response{Success: false, Message: "Failed to list deployments: " + err.Error()}
 	}
@@ -121,11 +123,24 @@ func (ch *ControllerCommandHandler) handleCreateDeployment(paramsRaw []byte) dom
 	// 	response = domain.Response{Success: false, Message: "Invalid compose file: " + err.Error()}
 	// 	break
 	// }
-	err := ch.deploymentService.CreateDeployment(params.Name, params.TargetLXC, params.ComposeYML)
+	err := ch.deploymentService.CreateDeployment(params.Name, params.TargetLXC, params.ComposeYAML)
 	if err != nil {
 		return domain.Response{Success: false, Message: "Deployment failed: " + err.Error()}
 	}
 	return domain.Response{Success: true, Message: fmt.Sprintf("Deployment %s to target %s created", params.Name, params.TargetLXC)}
+}
+
+func (ch *ControllerCommandHandler) handleUpdateDeployment(paramsRaw []byte) domain.Response {
+	var params domain.CreateDeploymentOptions
+	if err := json.Unmarshal(paramsRaw, &params); err != nil {
+		return domain.Response{Success: false, Message: fmt.Sprintf("Invalid parameters for update-deployment: %v", err)}
+	}
+
+	err := ch.deploymentService.UpdateDeployment(params.Name, params.ComposeYAML)
+	if err != nil {
+		return domain.Response{Success: false, Message: "Update failed: " + err.Error()}
+	}
+	return domain.Response{Success: true, Message: fmt.Sprintf("Deployment %s to target %s updated", params.Name, params.TargetLXC)}
 }
 
 func (ch *ControllerCommandHandler) handleDeleteDeployment(paramsRaw []byte) domain.Response {

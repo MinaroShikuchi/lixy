@@ -9,8 +9,9 @@ import (
 
 // deploymentsCmd represents the deployments subcommand of get
 var deploymentsCmd = &cobra.Command{
-	Use:   "deployments [NAME]",
-	Short: "List all deployments or get details of a specific deployment",
+	Use:          "deployments [NAME]",
+	Short:        "List all deployments or get details of a specific deployment",
+	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := socket.NewControllerClient()
 
@@ -35,7 +36,7 @@ var deploymentsCmd = &cobra.Command{
 			}
 
 			fmt.Printf("Name: %s\n", deployment["name"])
-			fmt.Printf("Target LXC: %s\n", deployment["targetLXC"])
+			fmt.Printf("Target LXC: %s\n", deployment["target_lxc"])
 			fmt.Printf("Status: %s\n", deployment["status"])
 			// Display other deployment details
 
@@ -59,7 +60,7 @@ var deploymentsCmd = &cobra.Command{
 		}
 
 		fmt.Println("DEPLOYMENTS:")
-		fmt.Println("NAME\t\tTARGET LXC\tSTATUS")
+		fmt.Println("NAME\t\tTARGET LXC\t\t\tSTATUS")
 		for _, item := range items {
 			deployment, ok := item.(map[string]interface{})
 			if !ok {
@@ -67,7 +68,7 @@ var deploymentsCmd = &cobra.Command{
 			}
 			fmt.Printf("%s\t\t%s\t\t%s\n",
 				deployment["name"],
-				deployment["targetLXC"],
+				deployment["target_lxc"],
 				deployment["status"])
 		}
 

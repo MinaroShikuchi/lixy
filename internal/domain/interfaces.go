@@ -37,6 +37,14 @@ type DeploymentResponse struct {
 	Output  string `json:"output,omitempty"`
 }
 
+type DeploymentDto struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	TargetLXC   string `json:"target_lxc"`
+	Status      string `json:"status"`
+	ComposeYAML []byte `json:"compose_yaml"`
+}
+
 // SystemInfo holds agent environment information
 type SystemInfo struct {
 	Version  string `json:"version"`
@@ -75,4 +83,8 @@ type SaveAgentResponse struct {
 	Success bool              `json:"success"`
 	Message string            `json:"message,omitempty"`
 	Data    map[string]string `json:"data,omitempty"`
+}
+
+type DeploymentStatusUpdate struct {
+	Status string `json:"status"`
 }

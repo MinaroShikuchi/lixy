@@ -117,7 +117,10 @@ func NewAgentClient(version string, port int, logLevel string) *Client {
 	client.CommandHandler = agent.NewAgentCommandHandler(client.Logger, tokenService, client.GetSystemInfo)
 	// Initialize endpoint handler
 	client.EndpointHandler = agent.NewAgentRouter()
-	client.Reconciler = NewDeploymentReconciler(logger, 30*time.Second, tokenService)
+
+	// Initialize deployment runner
+	deploymentRunner := NewDeploymentRunner(logger)
+	client.Reconciler = NewDeploymentReconciler(logger, 30*time.Second, tokenService, deploymentRunner)
 	return client
 
 }

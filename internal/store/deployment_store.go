@@ -12,11 +12,11 @@ import (
 
 // DeploymentInfo represents information about a deployment with docker compose
 type DeploymentInfo struct {
-	ID         string
-	Name       string
-	TargetLXC  string
-	ComposeYML []byte
-	Status     string
+	ID          string
+	Name        string
+	TargetLXC   string
+	ComposeYAML []byte
+	Status      string
 }
 
 // DeploymentStore manages deployments persisted in SQLite
@@ -80,7 +80,7 @@ func (ds *DeploymentStore) List() []DeploymentInfo {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
-	rows, err := ds.db.Query(`SELECT id, name, target_lxc, status FROM deployments`)
+	rows, err := ds.db.Query(`SELECT id, name, target_lxc, status, compose_yml FROM deployments`)
 	if err != nil {
 		log.Printf("ListDeployments query error: %v", err)
 		return nil
@@ -90,7 +90,7 @@ func (ds *DeploymentStore) List() []DeploymentInfo {
 	result := make([]DeploymentInfo, 0)
 	for rows.Next() {
 		var d DeploymentInfo
-		if err := rows.Scan(&d.ID, &d.Name, &d.TargetLXC, &d.Status); err != nil {
+		if err := rows.Scan(&d.ID, &d.Name, &d.TargetLXC, &d.Status, &d.ComposeYAML); err != nil {
 			log.Printf("ListDeployments scan error: %v", err)
 			continue
 		}
@@ -108,8 +108,8 @@ func (ds *DeploymentStore) Get(name string) (DeploymentInfo, bool) {
 	defer ds.mu.RUnlock()
 
 	var d DeploymentInfo
-	err := ds.db.QueryRow(`SELECT id, name, target_lxc, status FROM deployments WHERE name = ?`, name).
-		Scan(&d.ID, &d.Name, &d.TargetLXC, &d.Status)
+	err := ds.db.QueryRow(`SELECT id, name, target_lxc, status, compose_yml FROM deployments WHERE name = ?`, name).
+		Scan(&d.ID, &d.Name, &d.TargetLXC, &d.Status, &d.ComposeYAML)
 	if err == sql.ErrNoRows {
 		return DeploymentInfo{}, false
 	}
@@ -121,39 +121,47 @@ func (ds *DeploymentStore) Get(name string) (DeploymentInfo, bool) {
 }
 
 // AddOrUpdateDeployment adds or updates a deployment in the DB
-func (ds *DeploymentStore) Create(deployment DeploymentInfo) {
+func (ds *DeploymentStore) Create(deployment DeploymentInfo) error {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
-	// Try update first
-	res, err := ds.db.Exec(`UPDATE deployments SET target_lxc = ?, status = ? WHERE name = ?`,
-		deployment.TargetLXC, deployment.Status, deployment.Name)
+	// Try update first (also update compose_yml)
+	res, err := ds.db.Exec(`UPDATE deployments SET target_lxc = ?, compose_yml = ?, status = ? WHERE name = ?`,
+		deployment.TargetLXC, deployment.ComposeYAML, deployment.Status, deployment.Name)
 	if err != nil {
-		log.Printf("AddOrUpdateDeployment update error: %v", err)
-		return
+		return fmt.Errorf("failed to add or update deployment: %w", err)
 	}
 	ra, err := res.RowsAffected()
 	if err != nil {
-		log.Printf("AddOrUpdateDeployment RowsAffected error: %v", err)
-		return
+		return fmt.Errorf("failed to add or update deployment: %w", err)
 	}
 	if ra > 0 {
-		return
+		// update applied, don't insert
+		return nil
 	}
-	//debug log deployment
+
+	// Insert if update didn't affect any row
 	log.Printf("Inserting deployment: Name=%s, TargetLXC=%s, Status=%s", deployment.Name, deployment.TargetLXC, deployment.Status)
 
 	id := uuid.New().String()
-	// Insert if update didn't affect any row
-	res, err = ds.db.Exec(`INSERT INTO deployments (id, name, target_lxc, compose_yml, status) VALUES (?, ?, ?, ?, ?)`,
-		id, deployment.Name, deployment.TargetLXC, deployment.ComposeYML, deployment.Status)
+	_, err = ds.db.Exec(`INSERT INTO deployments (id, name, target_lxc, compose_yml, status) VALUES (?, ?, ?, ?, ?)`,
+		id, deployment.Name, deployment.TargetLXC, deployment.ComposeYAML, deployment.Status)
 	if err != nil {
-		log.Printf("AddOrUpdateDeployment insert error: %v", err)
-		return
+		return fmt.Errorf("failed to add deployment: %w", err)
 	}
-	if err == nil {
-		deployment.ID = id
+	return nil
+}
+
+// Update Deployment updates an existing deployment in the DB
+func (ds *DeploymentStore) Update(deployment DeploymentInfo) error {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	_, err := ds.db.Exec(`UPDATE deployments SET compose_yml = ?, status = ? WHERE name = ?`, deployment.ComposeYAML, deployment.Status, deployment.Name)
+	if err != nil {
+		return fmt.Errorf("failed to update deployment: %w", err)
 	}
+	return nil
 }
 
 // Removes a deployment by name from the DB

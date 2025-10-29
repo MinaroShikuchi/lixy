@@ -16,9 +16,9 @@ type RegisterAgentOptions struct {
 }
 
 type CreateDeploymentOptions struct {
-	Name       string `json:"name"`
-	TargetLXC  string `json:"target_lxc"`
-	ComposeYML []byte `json:"compose_yml"`
+	Name        string `json:"name"`
+	TargetLXC   string `json:"target_lxc"`
+	ComposeYAML []byte `json:"compose_yml"`
 }
 
 type DeleteDeploymentOptions struct {
