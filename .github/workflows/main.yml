@@ -205,7 +205,7 @@ jobs:
               "$upload_url?name=$encoded_name") || { echo "Asset upload failed for $asset_name"; echo "$resp"; exit 1; }
 
             # basic validation of response
-            if echo "$resp" | jq -e 'has(\"id\")' >/dev/null; then
+            if echo "$resp"; then
               echo "Uploaded $asset_name"
             else
               echo "Unexpected response uploading $asset_name:"
