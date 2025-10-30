@@ -200,6 +200,56 @@ export LIXIES_LOG_LEVEL="info"                        # Log level (debug, info, 
 export LIXIES_WORK_DIR="/var/lib/lixies"              # Working directory
 ```
 
+### Controller Service Configuration
+```
+sudo nano /etc/systemd/system/lixy-controller.service
+```
+
+```
+[Unit]
+Description=Lixy Controller Service
+After=network.target
+
+[Service]
+Type=simple
+User=lixy
+Group=lixy
+WorkingDirectory=/opt/lixy
+ExecStart=/opt/lixy/lixy
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lixy-controller
+Environment=PORT=8080
+
+[Install]
+WantedBy=multi-user.target
+```
+### Create a Dedicated User 
+```
+sudo useradd -r -s /bin/false lixy
+```
+
+### Configure Application Directory and Permissions
+```
+sudo mkdir -p /opt/lixy
+sudo cp /path/to/your/lixy-binary /opt/lixy/lixy
+sudo chown -R lixy:lixy /opt/lixy
+sudo chmod +x /opt/lixy/lixy
+```
+
+### Enabling and Starting the Service
+
+```
+sudo systemctl daemon-reload
+sudo systemctl enable lixy.service
+# Start the service
+sudo systemctl start lixy.service
+# Check the status
+sudo systemctl status lixy.service
+```
+
 ## Project Structure
 
 ```
