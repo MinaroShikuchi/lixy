@@ -15,13 +15,15 @@ type ControllerCommandHandler struct {
 	logger            *slog.Logger
 	agentService      *services.AgentService
 	deploymentService *services.DeploymentService
+	getSystemInfo     func() (*domain.SystemInfo, error)
 }
 
-func NewControllerCommandHandler(logger *slog.Logger, agentService *services.AgentService, deploymentService *services.DeploymentService) *ControllerCommandHandler {
+func NewControllerCommandHandler(logger *slog.Logger, agentService *services.AgentService, deploymentService *services.DeploymentService, GetSystemInfo func() (*domain.SystemInfo, error)) *ControllerCommandHandler {
 	return &ControllerCommandHandler{
 		logger:            logger,
 		agentService:      agentService,
 		deploymentService: deploymentService,
+		getSystemInfo:     GetSystemInfo,
 	}
 }
 
@@ -60,8 +62,13 @@ func (ch *ControllerCommandHandler) handleRegisterAgent(params []byte) domain.Re
 		ch.logger.Error("Failed to generate registration token", "error", err)
 		return domain.Response{Success: false, Message: "Failed to generate registration token: " + err.Error()}
 	}
-	//TODO: controller url from config
-	return domain.Response{Success: true, Data: map[string]string{"token": token, "controller": "http://localhost:8080"}}
+	sysInfo, err := ch.getSystemInfo()
+	if err != nil {
+		ch.logger.Error("Failed to get system info", "error", err)
+		return domain.Response{Success: false, Message: "Failed to get system info: " + err.Error()}
+	}
+	controllerUrl := fmt.Sprintf("http://%s:%d", sysInfo.IP, sysInfo.Port)
+	return domain.Response{Success: true, Data: map[string]string{"token": token, "controller": controllerUrl}}
 }
 
 func (ch *ControllerCommandHandler) handleGetDeployments(params []byte) domain.Response {

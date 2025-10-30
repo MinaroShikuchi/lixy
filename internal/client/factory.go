@@ -33,15 +33,6 @@ func NewControllerClient(version string, port int, logLevel string) *Client {
 		logger.Error("Failed to initialize authentication", "error", err)
 	}
 
-	// // Initialize database connection
-	// dataDir := "./data"
-	// if err := os.MkdirAll(dataDir, 0700); err != nil {
-	// 	log.Fatalf("Failed to create data directory: %v", err)
-	// }
-
-	// // Initialize SQLite token store
-	// dbPath := filepath.Join(dataDir, "agent.db")
-	// Initialize database connection if using a database
 	db, err := sql.Open("sqlite3", "lixy.db")
 	if err != nil {
 		logger.Error("Failed to open database", "error", err)
@@ -73,13 +64,14 @@ func NewControllerClient(version string, port int, logLevel string) *Client {
 	agentService := services.NewAgentService(agentStore)
 	deploymentService := services.NewDeploymentService(agentStore, deploymentStore)
 	// Initialize command handler
-	client.CommandHandler = controller.NewControllerCommandHandler(client.Logger, agentService, deploymentService)
-	// Initialize endpoint handler
+	client.CommandHandler = controller.NewControllerCommandHandler(client.Logger, agentService, deploymentService, client.GetSystemInfo)
+	// Initialize endpoint handlers
 	agentHandlers := handlers.NewAgentHandlers(agentService)
 	deploymentHandlers := handlers.NewDeploymentHandlers(deploymentService)
+	// Initialize router
 	client.EndpointHandler = controller.NewControllerRouter(agentHandlers, deploymentHandlers)
 
-	client.HealthChecker = NewHealthChecker(5*time.Minute, agentStore)
+	client.HealthChecker = NewHealthChecker(5*time.Minute, agentStore, logger)
 
 	return client
 
@@ -115,7 +107,7 @@ func NewAgentClient(version string, port int, logLevel string) *Client {
 	tokenService := services.NewTokenService(tokenStore)
 	// Initialize command handler
 	client.CommandHandler = agent.NewAgentCommandHandler(client.Logger, tokenService, client.GetSystemInfo)
-	// Initialize endpoint handler
+	// Initialize router
 	client.EndpointHandler = agent.NewAgentRouter()
 
 	// Initialize deployment runner

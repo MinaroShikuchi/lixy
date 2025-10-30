@@ -21,10 +21,8 @@ func HealthCheckHandler(w http.ResponseWriter, r *http.Request, logger *slog.Log
 	composeCmd := exec.Command("docker", "compose", "version")
 	composeErr := composeCmd.Run()
 
-	// Determine health status
 	healthy := dockerErr == nil && composeErr == nil
 
-	// Build appropriate response
 	status := struct {
 		Healthy bool   `json:"healthy"`
 		Message string `json:"message,omitempty"`
@@ -52,18 +50,4 @@ func HealthCheckHandler(w http.ResponseWriter, r *http.Request, logger *slog.Log
 	// 	"status":  "healthy",
 	// 	"version": "1.0.0",
 	// })
-}
-
-func respondWithError(w http.ResponseWriter, code int, message string) {
-	respondWithJSON(w, code, map[string]interface{}{
-		"success": false,
-		"message": message,
-	})
-}
-
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	response, _ := json.Marshal(payload)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	w.Write(response)
 }

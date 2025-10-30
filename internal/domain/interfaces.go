@@ -51,6 +51,7 @@ type SystemInfo struct {
 	OS       string `json:"os"`
 	Arch     string `json:"arch"`
 	Hostname string `json:"hostname"`
+	IP       string `json:"ip"`
 	Port     int    `json:"port"`
 }
 
