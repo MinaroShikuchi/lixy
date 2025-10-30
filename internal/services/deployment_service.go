@@ -1,11 +1,7 @@
 package services
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/MinaroShikuchi/lixy/internal/store"
@@ -60,51 +56,6 @@ func (s *DeploymentService) CreateDeployment(name string, targetLXC string, comp
 	return nil
 }
 
-func (s *DeploymentService) DeployToTarget(name string, targetLXC string, composeYAML string) error {
-	// Get agent information from the store
-	agent, found := s.agentStore.Get(targetLXC)
-
-	if !found {
-		return fmt.Errorf("agent with ID %s not found", targetLXC)
-	}
-
-	// Construct the deployment endpoint
-	deployURL := fmt.Sprintf("http://%s:%d/deploy", agent.IP, agent.Port)
-
-	// Create deployment request payload
-	deploymentRequest := domain.DeploymentRequest{
-		Name:        name,
-		ComposeYAML: []byte(composeYAML),
-	}
-
-	requestBody, err := json.Marshal(deploymentRequest)
-	if err != nil {
-		return fmt.Errorf("failed to marshal deployment request: %v", err)
-	}
-
-	// Send the deployment request to the agent
-	resp, err := http.Post(deployURL, "application/json", bytes.NewBuffer(requestBody))
-	if err != nil {
-		return fmt.Errorf("failed to send deployment request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Check the response status
-	if resp.StatusCode != http.StatusOK {
-		var errorResponse struct {
-			Message string `json:"message"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err != nil {
-			return fmt.Errorf("deployment failed with status %d", resp.StatusCode)
-		}
-		return fmt.Errorf("deployment failed: %s", errorResponse.Message)
-	}
-
-	log.Printf("Deployment %s initiated successfully on target %s", name, targetLXC)
-	return nil
-
-}
-
 func (s *DeploymentService) UpdateDeployment(name string, composeYAML []byte) error {
 	if deployment, exists := s.deploymentStore.Get(name); exists {
 		err := s.deploymentStore.Update(store.DeploymentInfo{
@@ -154,7 +105,6 @@ func (s *DeploymentService) ValidateDeployment(targetLXC string, composeYAML str
 		return fmt.Errorf("compose file missing 'services' section")
 	}
 
-	log.Printf("Compose file validated successfully for target %s", targetLXC)
 	return nil
 }
 

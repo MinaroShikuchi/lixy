@@ -2,12 +2,16 @@ package middlewares
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"strings"
 
 	"github.com/MinaroShikuchi/lixy/internal/services"
 )
+
+// ctxKey is a private type for context keys to avoid collisions.
+type ctxKey string
+
+const agentNameKey ctxKey = "agent_name"
 
 // Middleware to authenticate API requests
 func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -37,13 +41,12 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// Validate token and identify agent
 		agentName, err := services.ValidateAgentToken(token, remoteIP)
 		if err != nil {
-			log.Printf("Unauthorized access attempt from IP %s: %v", remoteIP, err)
 			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 			return
 		}
 
 		// Add agent name to request context for handlers to use
-		ctx := context.WithValue(r.Context(), "agent_name", agentName)
+		ctx := context.WithValue(r.Context(), agentNameKey, agentName)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

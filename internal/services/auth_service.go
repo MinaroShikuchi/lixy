@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"time"
@@ -59,7 +58,6 @@ func GenerateRegistrationToken(duration time.Duration) (string, error) {
 	expirationTime := time.Now().Add(duration * time.Second)
 	//debug log
 
-	log.Printf("Generated registration token %s expiring at %s", token, duration)
 	claims := &jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(expirationTime),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -122,14 +120,12 @@ func ValidateAgentToken(token string, remoteIP string) (string, error) {
 	}
 	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			log.Printf("Token from IP %s has unexpected signing method: %v", remoteIP, token.Header["alg"])
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return jwtSecret, nil
 	})
 
 	if err != nil {
-		log.Printf("Token validation error from IP %s: %v", remoteIP, err)
 		return "", fmt.Errorf("invalid token: %w", err)
 	}
 
@@ -163,7 +159,6 @@ func ValidateRegistrationToken(tokenString string) (bool, error) {
 	if len(jwtSecret) == 0 {
 		return false, fmt.Errorf("JWT secret not initialized")
 	}
-	log.Printf("Validating registration token")
 
 	// Parse the token
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -192,7 +187,6 @@ func ValidateRegistrationToken(tokenString string) (bool, error) {
 	// Verify this is a registration token
 	tokenType, hasType := claims["sub"].(string)
 	if !hasType || tokenType != "registration" {
-		log.Printf("Token is not a registration token")
 		return false, fmt.Errorf("not a registration token")
 	}
 
@@ -203,7 +197,6 @@ func ValidateRegistrationToken(tokenString string) (bool, error) {
 			return false, fmt.Errorf("registration token expired")
 		}
 	} else {
-		log.Printf("Token missing expiration claim")
 		return false, fmt.Errorf("token missing expiration claim")
 	}
 

@@ -13,12 +13,12 @@ type ControllerRouter struct {
 }
 
 func (ce *ControllerRouter) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/register-agent", ce.agentHandlers.RegisterAgentHandler)
+	mux.HandleFunc("/api/register-agent", middlewares.LoggingMiddleware(ce.agentHandlers.RegisterAgentHandler))
 	mux.HandleFunc("/api/tokens/registration", ce.agentHandlers.GenerateRegistrationTokenHandler)
 	mux.HandleFunc("/api/unregister-agent", middlewares.AuthMiddleware(ce.agentHandlers.UnregisterAgentHandler))
-	mux.HandleFunc("/api/save-agent", middlewares.AuthMiddleware(ce.agentHandlers.SaveAgentHandler))
-	mux.HandleFunc("/api/deployments/", middlewares.AuthMiddleware(ce.deploymentHandlers.ListDeploymentsHandler))
-	mux.HandleFunc("/api/deployments/{name}", middlewares.AuthMiddleware(ce.deploymentHandlers.UpdateDeploymentStatus))
+	mux.HandleFunc("/api/save-agent", middlewares.AuthMiddleware(middlewares.LoggingMiddleware(ce.agentHandlers.SaveAgentHandler)))
+	mux.HandleFunc("/api/deployments/", middlewares.AuthMiddleware(middlewares.LoggingMiddleware(ce.deploymentHandlers.ListDeploymentsHandler)))
+	mux.HandleFunc("/api/deployments/{name}", middlewares.AuthMiddleware(middlewares.LoggingMiddleware(ce.deploymentHandlers.UpdateDeploymentStatus)))
 	mux.HandleFunc("/admin/agents", middlewares.AuthMiddleware(ce.agentHandlers.ListAgentsHandler))
 
 }
