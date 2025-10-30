@@ -166,6 +166,9 @@ jobs:
 
           # find all files in the release directory (downloaded artifacts) and upload each as a separate asset
           shopt -s nullglob
+
+          ls -al release/
+          
           files=(release/*)
           if [ ${#files[@]} -eq 0 ]; then
             echo "No files found in release/ to upload"
