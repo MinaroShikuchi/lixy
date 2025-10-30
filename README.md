@@ -17,6 +17,9 @@ Lixy is a lightweight GitOps-inspired system for managing container deployments 
 
 ## Future Feature
 
+- [ ] Clean TODO
+- [ ] Clean log library usage
+- [ ] Clean dead code
 - [ ] Clean commands controller, command structure + command options interfaces
 - [ ] Retrieve deployment from controller and parse it to execute the tasks
 - [ ] Lixies should have a client that set their token in headers

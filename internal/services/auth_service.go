@@ -60,7 +60,6 @@ func GenerateRegistrationToken(duration time.Duration) (string, error) {
 	//debug log
 
 	log.Printf("Generated registration token %s expiring at %s", token, duration)
-	log.Printf("Generated registration token %s expiring at %s", token, expirationTime.String())
 	claims := &jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(expirationTime),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),

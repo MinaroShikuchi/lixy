@@ -4,19 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
 )
 
-// Client handles communication with the GitOps agent
+// Controller client  handles communication with the agent
 type Client struct {
 	Name            string
 	Version         string
@@ -40,28 +40,47 @@ func (c *Client) GetSystemInfo() (*domain.SystemInfo, error) {
 		return nil, err
 	}
 
+	// get the ip addresss of the machine
+	ip := ""
+
+	// Iterate network interfaces and pick the first non-loopback IPv4 address
+	if addrs, err := net.InterfaceAddrs(); err == nil {
+		for _, addr := range addrs {
+			var ipnet *net.IPNet
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ipnet = v
+			case *net.IPAddr:
+				ipnet = &net.IPNet{IP: v.IP, Mask: v.IP.DefaultMask()}
+			}
+			if ipnet == nil {
+				continue
+			}
+			ipAddr := ipnet.IP
+			if ipAddr == nil || ipAddr.IsLoopback() {
+				continue
+			}
+			if ip4 := ipAddr.To4(); ip4 != nil {
+				ip = ip4.String()
+				break
+			}
+		}
+	}
+
+	// Return SystemInfo with discovered IP
 	return &domain.SystemInfo{
 		Version:  c.Version,
 		OS:       runtime.GOOS,
 		Arch:     runtime.GOARCH,
 		Hostname: hostname,
+		IP:       ip,
 		Port:     c.Port,
 	}, nil
 }
 
 func (c *Client) SetupHttpServer() {
-	// Create the mux
 	mux := http.NewServeMux()
-
-	// Add a nil check to prevent panic
-	if c.EndpointHandler != nil {
-		c.EndpointHandler.RegisterRoutes(mux)
-	} else {
-		// Either provide default routes or log a warning
-		log.Printf("Warning: EndpointHandler is nil, no routes registered")
-	}
-
-	// Let the appropriate endpoint handler register routes on this mux
+	c.EndpointHandler.RegisterRoutes(mux)
 	c.HttpServer = &http.Server{
 		Addr:         ":" + fmt.Sprint(c.Port),
 		Handler:      mux,
@@ -79,7 +98,6 @@ func (c *Client) StartHttpServer() {
 }
 
 func (c *Client) SetupSocketServer() {
-	// Setup the Unix socket server (existing code)
 	if err := os.RemoveAll(c.SocketPath); err != nil {
 		c.Logger.Error("Failed to remove existing socket", "error", err)
 	}
@@ -100,21 +118,47 @@ func (c *Client) SetupSocketServer() {
 }
 
 func (c *Client) StartSocketServer(ctx context.Context) {
-	c.Logger.Info("Starting Unix socket server", "address", c.sockerListener.Addr().String())
+	c.Logger.Info("Starting Unix socket server", "socketPath", c.SocketPath)
 	for {
-		conn, err := c.sockerListener.Accept()
-		if err != nil {
-			select {
-			case <-ctx.Done():
-				// Server is shutting down
-				return
-			default:
-				log.Printf("Failed to accept socket connection: %v", err)
-				continue
-			}
+		// Check context before attempting to accept
+		select {
+		case <-ctx.Done():
+			c.Logger.Info("Socket server shutting down gracefully")
+			return
+		default:
+			// Continue only if we're not shutting down
 		}
 
-		// Handle each connection in a separate goroutine
+		// Set a timeout to unblock Accept periodically
+		if unixListener, ok := c.sockerListener.(*net.UnixListener); ok {
+			unixListener.SetDeadline(time.Now().Add(1 * time.Second))
+		}
+
+		// Accept a connection
+		conn, err := c.sockerListener.Accept()
+		if err != nil {
+			// Handle specific error types differently
+			netErr, ok := err.(net.Error)
+			if ok && netErr.Timeout() {
+				// This is just our periodic timeout, continue silently
+				continue
+			}
+
+			if ctx.Err() != nil {
+				// We're shutting down, exit gracefully
+				return
+			}
+
+			if strings.Contains(err.Error(), "use of closed network connection") {
+				// Socket was closed, likely during shutdown
+				return
+			}
+
+			c.Logger.Error("Failed to accept connection", "error", err)
+			continue
+		}
+
+		// Handle the connection
 		go c.handleConnection(conn)
 	}
 }
@@ -127,9 +171,15 @@ func (c *Client) StopHttpServer(ctx context.Context) {
 }
 
 func (c *Client) StopSocketServer() {
-	// c.Logger.Info("Shutting down Lixies Unix socket server")
-	if err := c.sockerListener.Close(); err != nil {
-		c.Logger.Error("Failed to close socket listener", "error", err)
+	if c.sockerListener != nil {
+		c.Logger.Info("Closing socket listener")
+		c.sockerListener.Close()
+
+		// Clean up socket file if needed
+		if unixListener, ok := c.sockerListener.(*net.UnixListener); ok {
+			addr := unixListener.Addr().(*net.UnixAddr)
+			os.Remove(addr.Name)
+		}
 	}
 }
 

@@ -1,7 +1,7 @@
 package client
 
 import (
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/MinaroShikuchi/lixy/internal/services"
@@ -10,16 +10,18 @@ import (
 
 // HealthChecker manages periodic health checks for all agents
 type HealthChecker struct {
+	logger        *slog.Logger
 	agentStore    *store.AgentStore
 	checkInterval time.Duration
 	stopCh        chan struct{}
 }
 
 // NewHealthChecker creates a new health checker
-func NewHealthChecker(checkInterval time.Duration, agentStore *store.AgentStore) *HealthChecker {
+func NewHealthChecker(checkInterval time.Duration, agentStore *store.AgentStore, logger *slog.Logger) *HealthChecker {
 	return &HealthChecker{
 		agentStore:    agentStore,
 		checkInterval: checkInterval,
+		logger:        logger,
 		stopCh:        make(chan struct{}),
 	}
 }
@@ -50,14 +52,14 @@ func (c *HealthChecker) Stop() {
 
 // checkAllAgents verifies the health of all registered agents
 func (c *HealthChecker) checkAllAgents() {
-	log.Println("Running health check for all agents...")
+	c.logger.Info("Running health check for all agents")
 
 	// Get all agents via agentStore
 	agents := c.agentStore.List()
 
 	// If there are no agents, log a message and return
 	if len(agents) == 0 {
-		log.Println("No agents found; skipping health check")
+		c.logger.Info("No agents found; skipping health check")
 		return
 	}
 
@@ -67,13 +69,12 @@ func (c *HealthChecker) checkAllAgents() {
 		healthy, message := services.CheckAgentHealth(agent, c.agentStore)
 
 		// Log the result
-		logLevel := "INFO"
 		if !healthy {
-			logLevel = "WARN"
+			c.logger.Warn("Agent health check failed", "agent", agent.Name, "ip", agent.IP, "message", message)
+		} else {
+			c.logger.Info("Agent is healthy", "agent", agent.Name, "ip", agent.IP)
 		}
-		log.Printf("[%s] Health check for agent %s (%s): %t - %s",
-			logLevel, agent.Name, agent.IP, healthy, message)
 	}
 
-	log.Println("Health check completed for all agents")
+	c.logger.Info("Health check completed for all agents")
 }

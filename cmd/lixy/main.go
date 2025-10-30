@@ -19,8 +19,6 @@ type Config struct {
 }
 
 func main() {
-
-	// c := client.LixiesHttpClient("Lixy Controller", "0.1.0", 8080, "info", "/tmp/lixy.sock")
 	c := client.NewControllerClient(Version, 8080, "info")
 	c.SetupHttpServer()
 	c.SetupSocketServer()
@@ -30,7 +28,6 @@ func main() {
 
 	// Create a context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Start Unix socket server in a goroutine
 	wg.Add(1)
@@ -39,7 +36,7 @@ func main() {
 		c.StartSocketServer(ctx)
 	}()
 
-	// Start server in a goroutine
+	// Start HTTP server in a goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -57,15 +54,16 @@ func main() {
 
 	c.Logger.Info("Shutting down server...")
 
-	// Shutdown HTTP server first
+	// IMPORTANT: First cancel the context to signal all operations to stop
+	cancel()
+
+	// Then initiate server shutdown with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
+	// Stop HTTP and socket servers
 	c.StopHttpServer(shutdownCtx)
 	c.StopSocketServer()
-
-	// Signal the socket server to stop
-	cancel()
 
 	// Wait for all goroutines to finish
 	wg.Wait()

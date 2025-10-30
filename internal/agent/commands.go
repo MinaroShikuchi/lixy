@@ -112,7 +112,7 @@ func (ch *AgentCommandHandler) registerWithController(controllerURL, registratio
 
 	req := domain.SaveAgentRequest{
 		Version: sysInfo.Version,
-		IP:      sysInfo.Hostname, // Using hostname as a placeholder for IP
+		IP:      sysInfo.IP, // Using hostname as a placeholder for IP
 		Port:    sysInfo.Port,
 	}
 

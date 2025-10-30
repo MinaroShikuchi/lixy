@@ -3,7 +3,6 @@ package services
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -95,15 +94,4 @@ func CheckAgentHealth(agent store.AgentInfo, agentStore *store.AgentStore) (bool
 
 		return false, result.Message
 	}
-}
-
-// updateAgentStatus updates the agent's status in the database
-func updateAgentStatus(agentID, status, message string, db *sql.DB) error {
-	// Update the agent's status and last_seen timestamp
-	_, err := db.Exec(
-		"UPDATE agents SET status = ?, message = ?, last_seen = ? WHERE id = ?",
-		status, message, time.Now().Unix(), agentID,
-	)
-
-	return err
 }
