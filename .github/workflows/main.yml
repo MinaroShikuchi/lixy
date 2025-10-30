@@ -152,21 +152,33 @@ jobs:
           echo "upload_url=$upload_url" >> $GITHUB_OUTPUT
           echo "release_id=$(echo "$resp" | jq -r '.id')" >> $GITHUB_OUTPUT
 
-      - name: Upload release assets
+      - name: Upload release asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          upload_url='${{ steps.create_release.outputs.upload_url }}'
-          upload_url="${upload_url%\{*}"
-          echo "upload url: $upload_url"
-          for f in release/*; do
-            [ -f "$f" ] || continue
-            name=$(basename "$f")
-            echo "Uploading $name ..."
-            curl -sS -X POST \
-              -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Content-Type: application/octet-stream" \
-              --data-binary @"$f" \
-              "$upload_url?name=$name"
-          done
+
+          upload_url="${{ steps.create_release.outputs.upload_url }}"
+          if [ -z "$upload_url" ]; then
+            echo "No upload_url available"
+            exit 1
+          fi
+
+          asset_path="./$BINARY_NAME"
+          if [ ! -f "$asset_path" ]; then
+            echo "Asset not found: $asset_path"
+            ls -al
+            exit 1
+          fi
+
+          asset_name="$(basename "$asset_path")"
+          echo "Uploading $asset_name to $upload_url"
+
+          # Upload the asset. Content-Type should match your binary type.
+          curl -sS --fail -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"$asset_path" \
+            "$upload_url?name=$asset_name" \
+            | jq -r '.id' \
+            || { echo "Asset upload failed"; exit 1; }
