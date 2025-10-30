@@ -3,7 +3,6 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"sync"
 
 	"github.com/google/uuid"
@@ -74,7 +73,6 @@ func NewDeploymentStore(db *sql.DB) (*DeploymentStore, error) {
 // ListDeployments returns all deployments from the DB
 func (ds *DeploymentStore) List() []DeploymentInfo {
 	if ds == nil || ds.db == nil {
-		log.Printf("ListDeployments: deployment store or database is nil")
 		return nil
 	}
 	ds.mu.RLock()
@@ -82,7 +80,6 @@ func (ds *DeploymentStore) List() []DeploymentInfo {
 
 	rows, err := ds.db.Query(`SELECT id, name, target_lxc, status, compose_yml FROM deployments`)
 	if err != nil {
-		log.Printf("ListDeployments query error: %v", err)
 		return nil
 	}
 	defer rows.Close()
@@ -91,13 +88,11 @@ func (ds *DeploymentStore) List() []DeploymentInfo {
 	for rows.Next() {
 		var d DeploymentInfo
 		if err := rows.Scan(&d.ID, &d.Name, &d.TargetLXC, &d.Status, &d.ComposeYAML); err != nil {
-			log.Printf("ListDeployments scan error: %v", err)
 			continue
 		}
 		result = append(result, d)
 	}
 	if err := rows.Err(); err != nil {
-		log.Printf("ListDeployments rows error: %v", err)
 	}
 	return result
 }
@@ -114,7 +109,6 @@ func (ds *DeploymentStore) Get(name string) (DeploymentInfo, bool) {
 		return DeploymentInfo{}, false
 	}
 	if err != nil {
-		log.Printf("GetDeployment error: %v", err)
 		return DeploymentInfo{}, false
 	}
 	return d, true
@@ -139,9 +133,6 @@ func (ds *DeploymentStore) Create(deployment DeploymentInfo) error {
 		// update applied, don't insert
 		return nil
 	}
-
-	// Insert if update didn't affect any row
-	log.Printf("Inserting deployment: Name=%s, TargetLXC=%s, Status=%s", deployment.Name, deployment.TargetLXC, deployment.Status)
 
 	id := uuid.New().String()
 	_, err = ds.db.Exec(`INSERT INTO deployments (id, name, target_lxc, compose_yml, status) VALUES (?, ?, ?, ?, ?)`,
@@ -171,7 +162,6 @@ func (ds *DeploymentStore) Delete(name string) error {
 
 	_, err := ds.db.Exec(`DELETE FROM deployments WHERE name = ?`, name)
 	if err != nil {
-		log.Printf("DeleteDeployment error: %v", err)
 		return err
 	}
 	return nil

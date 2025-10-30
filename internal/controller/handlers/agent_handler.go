@@ -3,14 +3,14 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
+
 	"net/http"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
 )
 
-func (ah *AgentHandlers) SaveAgentHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Received %s request for %s", r.Method, r.URL.Path)
+func (ah *AgentHandlers) SaveAgentHandler(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -20,13 +20,13 @@ func (ah *AgentHandlers) SaveAgentHandler(w http.ResponseWriter, r *http.Request
 	var req domain.SaveAgentRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Error decoding registration request: %v", err)
+		logger.Error("Error decoding save agent request", slog.String("error", err.Error()))
 		http.Error(w, "Invalid request format", http.StatusBadRequest)
 		return
 	}
 	agentName := r.Context().Value("agent_name").(string)
 	if err := ah.agentService.CreateAgent(agentName, req.IP, req.Port); err != nil {
-		log.Printf("Error saving agent info: %v", err)
+		logger.Error("Failed to save agent information", slog.String("error", err.Error()))
 		http.Error(w, "Failed to save agent information", http.StatusInternalServerError)
 		return
 	}
