@@ -152,7 +152,7 @@ jobs:
           echo "upload_url=$upload_url" >> $GITHUB_OUTPUT
           echo "release_id=$(echo "$resp" | jq -r '.id')" >> $GITHUB_OUTPUT
 
-      - name: Upload release asset
+      - name: Upload release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -164,21 +164,47 @@ jobs:
             exit 1
           fi
 
-          asset_path="./$BINARY_NAME"
-          if [ ! -f "$asset_path" ]; then
-            echo "Asset not found: $asset_path"
-            ls -al
+          # find all files in the release directory (downloaded artifacts) and upload each as a separate asset
+          shopt -s nullglob
+          files=(release/*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No files found in release/ to upload"
+            ls -al release || true
             exit 1
           fi
 
-          asset_name="$(basename "$asset_path")"
-          echo "Uploading $asset_name to $upload_url"
+          for asset_path in "${files[@]}"; do
+            if [ ! -f "$asset_path" ]; then
+              echo "Skipping non-file: $asset_path"
+              continue
+            fi
 
-          # Upload the asset. Content-Type should match your binary type.
-          curl -sS --fail -X POST \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary @"$asset_path" \
-            "$upload_url?name=$asset_name" \
-            | jq -r '.id' \
-            || { echo "Asset upload failed"; exit 1; }
+            asset_name=$(basename "$asset_path")
+            # set sensible content types for common archive/binary formats
+            content_type="application/octet-stream"
+            case "$asset_name" in
+              *.tar.gz|*.tgz) content_type="application/gzip" ;;
+              *.zip) content_type="application/zip" ;;
+              *.exe) content_type="application/vnd.microsoft.portable-executable" ;;
+            esac
+
+            # URL-encode asset name for the upload query param using jq
+            encoded_name=$(jq -rn --arg v "$asset_name" '$v|@uri')
+
+            echo "Uploading $asset_name (content-type: $content_type) to $upload_url"
+
+            resp=$(curl -sS --fail -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Content-Type: $content_type" \
+              --data-binary @"$asset_path" \
+              "$upload_url?name=$encoded_name") || { echo "Asset upload failed for $asset_name"; echo "$resp"; exit 1; }
+
+            # basic validation of response
+            if echo "$resp" | jq -e 'has(\"id\")' >/dev/null; then
+              echo "Uploaded $asset_name"
+            else
+              echo "Unexpected response uploading $asset_name:"
+              echo "$resp"
+              exit 1
+            fi
+          done
