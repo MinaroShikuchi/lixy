@@ -112,14 +112,45 @@ jobs:
 
       - name: Create GitHub Release
         id: create_release
-        uses: actions/create-release@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ github.ref_name }}
-          release_name: ${{ github.ref_name }}
-          body: Automated release for ${{ github.ref_name }}
-          draft: false
-          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Determine tag to release.
+          # If workflow triggered by tag push, GITHUB_REF will be "refs/tags/<tag>"
+          if [[ "${GITHUB_REF:-}" =~ refs/tags/(.+) ]]; then
+            TAG=${BASH_REMATCH[1]}
+          else
+            echo "No tag detected in GITHUB_REF; failing."
+            exit 1
+          fi
+
+          echo "Creating release for tag: $TAG"
+
+          # Build release JSON. Adjust name/body/prerelease/draft as needed.
+          body=$(jq -c -n --arg tag "$TAG" \
+            '{ tag_name: $tag, name: $tag, body: ("Release " + $tag), draft: false, prerelease: false }')
+
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases"
+
+          resp=$(curl -sS -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -d "$body" \
+            "$api")
+
+          # exit on API error
+          if echo "$resp" | jq -e 'has("id") | not' >/dev/null; then
+            echo "Failed to create release. Response:"
+            echo "$resp"
+            exit 1
+          fi
+
+          # extract upload_url and strip the templated part
+          upload_url=$(echo "$resp" | jq -r '.upload_url' | sed -e 's/{?name,label}//')
+          echo "upload_url=$upload_url" >> $GITHUB_OUTPUT
+          echo "release_id=$(echo "$resp" | jq -r '.id')" >> $GITHUB_OUTPUT
 
       - name: Upload release assets
         env:
