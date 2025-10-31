@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -9,16 +10,6 @@ import (
 	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/MinaroShikuchi/lixy/internal/services"
 )
-
-type AgentHandlers struct {
-	agentService *services.AgentService
-}
-
-func NewAgentHandlers(agentService *services.AgentService) *AgentHandlers {
-	return &AgentHandlers{
-		agentService: agentService,
-	}
-}
 
 // GenerateRegistrationTokenHandler creates a time-limited token for agent registration
 func (ah *AgentHandlers) GenerateRegistrationTokenHandler(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +51,7 @@ func (ah *AgentHandlers) GenerateRegistrationTokenHandler(w http.ResponseWriter,
 }
 
 // RegisterAgentHandler handles agent registration with a token
-func (ah *AgentHandlers) RegisterAgentHandler(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
+func (ah *AgentHandlers) RegisterAgentHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -69,14 +60,14 @@ func (ah *AgentHandlers) RegisterAgentHandler(w http.ResponseWriter, r *http.Req
 	var req domain.RegistrationRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logger.Error("Error decoding registration request", slog.String("error", err.Error()))
+		ah.logger.Error("Error decoding registration request", slog.String("error", err.Error()))
 		http.Error(w, "Invalid request format", http.StatusBadRequest)
 		return
 	}
 
 	// Validate registration token
 	if _, err := services.ValidateRegistrationToken(req.Token); err != nil {
-		logger.Error("Agent registration failed", slog.String("error", err.Error()))
+		ah.logger.Error("Agent registration failed", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
@@ -89,7 +80,7 @@ func (ah *AgentHandlers) RegisterAgentHandler(w http.ResponseWriter, r *http.Req
 		http.Error(w, "Failed to generate permanent token", http.StatusInternalServerError)
 		return
 	}
-	logger.Debug("Agent registered successfully", slog.String("agent_name", agentName))
+	ah.logger.Debug("Agent registered successfully", slog.String("agent_name", agentName))
 	// Return success with permanent token
 	w.Header().Set("Content-Type", "application/json")
 
@@ -100,24 +91,7 @@ func (ah *AgentHandlers) RegisterAgentHandler(w http.ResponseWriter, r *http.Req
 	})
 }
 
-// UnrgisterAgentHandler handles agent registration
-func (ah *AgentHandlers) UnregisterAgentHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	agentName := r.Context().Value("agent_name").(string)
-
-	if err := ah.agentService.DeleteAgent(agentName); err != nil {
-		http.Error(w, "Failed to unregister agent", http.StatusInternalServerError)
-		return
-	}
-
-	// Return success response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"success": "true",
-		"message": "Agent unregistered successfully",
-	})
+// Helper function to generate a unique agent name
+func generateAgentName(hostname string) string {
+	return fmt.Sprintf("agent-%s", hostname)
 }

@@ -47,7 +47,16 @@ func (reconciler *DeploymentReconciler) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			if err := reconciler.reconcile(); err != nil {
+			tokenData, err := reconciler.tokenService.GetToken()
+			if err != nil {
+				reconciler.logger.Error("Failed to get token; skipping reconciliation", "error", err)
+				continue
+			}
+			if tokenData == (store.TokenData{}) {
+				reconciler.logger.Info("No token found; skipping reconciliation")
+				continue
+			}
+			if err := reconciler.reconcile(tokenData); err != nil {
 				reconciler.logger.Error("Failed to reconcile deployments", "error", err)
 			}
 		case <-reconciler.stopCh:
@@ -64,13 +73,8 @@ func (reconciler *DeploymentReconciler) Stop() {
 	close(reconciler.stopCh)
 }
 
-func (reconciler *DeploymentReconciler) reconcile() error {
+func (reconciler *DeploymentReconciler) reconcile(tokenData store.TokenData) error {
 	reconciler.logger.Info("Reconciling deployments...")
-
-	tokenData, err := reconciler.tokenService.GetToken()
-	if err != nil {
-		return fmt.Errorf("failed to get token: %v", err)
-	}
 
 	req, err := http.NewRequest(
 		"GET",

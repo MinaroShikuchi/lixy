@@ -2,12 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"os/exec"
 )
 
-func HealthCheckHandler(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
+func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
