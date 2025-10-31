@@ -66,8 +66,8 @@ func NewControllerClient(version string, port int, logLevel string) *Client {
 	// Initialize command handler
 	client.CommandHandler = controller.NewControllerCommandHandler(client.Logger, agentService, deploymentService, client.GetSystemInfo)
 	// Initialize endpoint handlers
-	agentHandlers := handlers.NewAgentHandlers(agentService)
-	deploymentHandlers := handlers.NewDeploymentHandlers(deploymentService)
+	agentHandlers := handlers.NewAgentHandlers(agentService, logger)
+	deploymentHandlers := handlers.NewDeploymentHandlers(deploymentService, logger)
 	// Initialize router
 	client.EndpointHandler = controller.NewControllerRouter(agentHandlers, deploymentHandlers)
 

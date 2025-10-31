@@ -8,9 +8,22 @@ import (
 	"net/http"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
+	"github.com/MinaroShikuchi/lixy/internal/services"
 )
 
-func (ah *AgentHandlers) SaveAgentHandler(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
+type AgentHandlers struct {
+	agentService *services.AgentService
+	logger       *slog.Logger
+}
+
+func NewAgentHandlers(agentService *services.AgentService, logger *slog.Logger) *AgentHandlers {
+	return &AgentHandlers{
+		agentService: agentService,
+		logger:       logger,
+	}
+}
+
+func (ah *AgentHandlers) SaveAgentHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -20,13 +33,19 @@ func (ah *AgentHandlers) SaveAgentHandler(w http.ResponseWriter, r *http.Request
 	var req domain.SaveAgentRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logger.Error("Error decoding save agent request", slog.String("error", err.Error()))
+		ah.logger.Error("Error decoding save agent request", slog.String("error", err.Error()))
 		http.Error(w, "Invalid request format", http.StatusBadRequest)
 		return
 	}
-	agentName := r.Context().Value("agent_name").(string)
+	agentName, ok := r.Context().Value(domain.AgentNameKey).(string)
+	if !ok {
+		ah.logger.Error("Agent name not found in context")
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	if err := ah.agentService.CreateAgent(agentName, req.IP, req.Port); err != nil {
-		logger.Error("Failed to save agent information", slog.String("error", err.Error()))
+		ah.logger.Error("Failed to save agent information", slog.String("error", err.Error()))
 		http.Error(w, "Failed to save agent information", http.StatusInternalServerError)
 		return
 	}
@@ -45,11 +64,6 @@ func (ah *AgentHandlers) SaveAgentHandler(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(resp)
 }
 
-// Helper function to generate a unique agent name
-func generateAgentName(hostname string) string {
-	return fmt.Sprintf("agent-%s", hostname)
-}
-
 // Handler to list all registered agents
 func (ah *AgentHandlers) ListAgentsHandler(w http.ResponseWriter, r *http.Request) {
 	// Get all agents from the store
@@ -58,4 +72,26 @@ func (ah *AgentHandlers) ListAgentsHandler(w http.ResponseWriter, r *http.Reques
 	// Return as JSON
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(agents)
+}
+
+// UnrgisterAgentHandler handles agent registration
+func (ah *AgentHandlers) UnregisterAgentHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	agentName := r.Context().Value("agent_name").(string)
+
+	if err := ah.agentService.DeleteAgent(agentName); err != nil {
+		http.Error(w, "Failed to unregister agent", http.StatusInternalServerError)
+		return
+	}
+
+	// Return success response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"success": "true",
+		"message": "Agent unregistered successfully",
+	})
 }

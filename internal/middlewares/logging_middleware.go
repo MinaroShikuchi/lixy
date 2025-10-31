@@ -40,10 +40,8 @@ func SetupLogger(level string) *slog.Logger {
 	return logger
 }
 
-type LoggerHandlerFunc func(http.ResponseWriter, *http.Request, *slog.Logger)
-
 // loggingMiddleware logs HTTP requests
-func LoggingMiddleware(next LoggerHandlerFunc) http.HandlerFunc {
+func LoggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
@@ -55,7 +53,7 @@ func LoggingMiddleware(next LoggerHandlerFunc) http.HandlerFunc {
 			"userAgent", r.UserAgent())
 
 		// Call the handler
-		next(w, r, logger)
+		next(w, r)
 
 		// Log request completion
 		logger.Info("Request completed",

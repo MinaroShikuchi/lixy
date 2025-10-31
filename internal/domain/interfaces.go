@@ -6,6 +6,11 @@ import (
 	"net/http"
 )
 
+// ctxKey is a private type for context keys to avoid collisions.
+type ctxKey string
+
+const AgentNameKey ctxKey = "agent_name"
+
 type EndpointHandler interface {
 	RegisterRoutes(mux *http.ServeMux)
 }

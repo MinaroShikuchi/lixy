@@ -52,14 +52,14 @@ func (c *HealthChecker) Stop() {
 
 // checkAllAgents verifies the health of all registered agents
 func (c *HealthChecker) checkAllAgents() {
-	c.logger.Info("Running health check for all agents")
+	c.logger.Debug("Running health check for all agents")
 
 	// Get all agents via agentStore
 	agents := c.agentStore.List()
 
 	// If there are no agents, log a message and return
 	if len(agents) == 0 {
-		c.logger.Info("No agents found; skipping health check")
+		c.logger.Debug("No agents found; skipping health check")
 		return
 	}
 
@@ -76,5 +76,5 @@ func (c *HealthChecker) checkAllAgents() {
 		}
 	}
 
-	c.logger.Info("Health check completed for all agents")
+	c.logger.Debug("Health check completed for all agents")
 }

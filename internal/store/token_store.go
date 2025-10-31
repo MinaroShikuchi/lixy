@@ -70,7 +70,7 @@ func (s *TokenStore) Get() (TokenData, error) {
 	err := row.Scan(&data.Token, &issuedAtUnix, &data.ControllerURL)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return TokenData{}, fmt.Errorf("no token found for agent")
+			return TokenData{}, nil
 		}
 		return TokenData{}, fmt.Errorf("failed to load token: %w", err)
 	}
