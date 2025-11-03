@@ -113,6 +113,37 @@ func GeneratePermanentToken(agentName string) (string, error) {
 	return tokenString, nil
 }
 
+func GenerateTemporaryToken(agentName string, duration time.Duration) (string, error) {
+	// Check if the secret has been initialized
+	if len(jwtSecret) == 0 {
+		return "", fmt.Errorf("JWT secret not initialized")
+	}
+
+	// Define token expiration
+	expirationTime := time.Now().Add(duration)
+
+	// Create custom claims with agent information
+	claims := jwt.MapClaims{
+		"sub":        "lixies-agent",        // Subject (the entity this token represents)
+		"name":       agentName,             // Agent name for reference
+		"iat":        time.Now().Unix(),     // Issued at timestamp
+		"exp":        expirationTime.Unix(), // Expiration time
+		"iss":        "lixy-controller",     // Issuer (your controller)
+		"token_type": "authentication",      // Token purpose (differentiates from registration tokens)
+	}
+
+	// Create the JWT token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// Sign the token with the secret key
+	tokenString, err := token.SignedString(jwtSecret)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign token: %w", err)
+	}
+
+	return tokenString, nil
+}
+
 func ValidateAgentToken(token string, remoteIP string) (string, error) {
 	// Implementation for token validation
 	if len(jwtSecret) == 0 {

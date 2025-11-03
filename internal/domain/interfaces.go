@@ -94,3 +94,9 @@ type SaveAgentResponse struct {
 type DeploymentStatusUpdate struct {
 	Status string `json:"status"`
 }
+
+type CreateDeploymentRequest struct {
+	Name        string `json:"name"`
+	ComposeYAML []byte `json:"compose_yaml"`
+	TargetLXC   string `json:"target_lxc"`
+}

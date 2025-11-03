@@ -17,14 +17,16 @@ Lixy is a lightweight GitOps-inspired system for managing container deployments 
 
 ## Future Feature
 
-- [ ] Clean commands controller, command structure + command options interfaces
-- [ ] Retrieve deployment from controller and parse it to execute the tasks
-- [ ] Lixies should have a client that set their token in headers
-- [ ] Clean logs, debug mode
-- [ ] Lixies should have a task list to execute docker command.
+- [ ] [Feature] Allow debug mode 
+- [ ] [Fix] versioning with ldflags in CI
+- [ ] [Feature] Add rollback deployment feature
+- [ ] [Feature] Controller web UI
+- [ ] [Feature] Controller should check docker registry for new image version
+- [ ] [Refactor] Clean commands controller, command structure + command options interfaces
+- [ ] [Refactor] Lixies should have a client that set their token in headers
+- [ ] [Feature] Lixies should have a task list to execute docker command.
     docker compose pull  => ok 
     docker compose up -d => ok
-- lixies cli should connect through the socket to lixies agent to get the agent info 
 
 ## Architecture
 
@@ -200,9 +202,9 @@ export LIXIES_LOG_LEVEL="info"                        # Log level (debug, info, 
 export LIXIES_WORK_DIR="/var/lib/lixies"              # Working directory
 ```
 
-### Controller Service Configuration
+#### Controller Service Configuration
 ```
-sudo nano /etc/systemd/system/lixy-controller.service
+sudo nano /etc/systemd/system/lixy.service
 ```
 
 ```
@@ -218,20 +220,27 @@ WorkingDirectory=/opt/lixy
 ExecStart=/opt/lixy/lixy
 Restart=on-failure
 RestartSec=10
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=lixy-controller
+StandardOutput=append:/var/log/lixy/lixy.log
+StandardError=append:/var/log/lixy/lixy-error.log
+SyslogIdentifier=lixy
 Environment=PORT=8080
 
 [Install]
 WantedBy=multi-user.target
 ```
-### Create a Dedicated User 
+
+#### Create a Dedicated User 
 ```
 sudo useradd -r -s /bin/false lixy
 ```
 
-### Configure Application Directory and Permissions
+#### Create Log Directory
+```
+sudo mkdir -p /var/log/lixy
+sudo chown lixy:lixy /var/log/lixy
+```
+
+#### Configure Application Directory and Permissions
 ```
 sudo mkdir -p /opt/lixy
 sudo cp /path/to/your/lixy-binary /opt/lixy/lixy
@@ -239,7 +248,7 @@ sudo chown -R lixy:lixy /opt/lixy
 sudo chmod +x /opt/lixy/lixy
 ```
 
-### Enabling and Starting the Service
+#### Enabling and Starting the Service
 
 ```
 sudo systemctl daemon-reload

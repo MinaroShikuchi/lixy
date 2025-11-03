@@ -68,8 +68,10 @@ func NewControllerClient(version string, port int, logLevel string) *Client {
 	// Initialize endpoint handlers
 	agentHandlers := handlers.NewAgentHandlers(agentService, logger)
 	deploymentHandlers := handlers.NewDeploymentHandlers(deploymentService, logger)
+	healthCheckHandler := handlers.NewHealthCheckHandler(version)
+
 	// Initialize router
-	client.EndpointHandler = controller.NewControllerRouter(agentHandlers, deploymentHandlers)
+	client.EndpointHandler = controller.NewControllerRouter(agentHandlers, deploymentHandlers, healthCheckHandler)
 
 	client.HealthChecker = NewHealthChecker(5*time.Minute, agentStore, logger)
 

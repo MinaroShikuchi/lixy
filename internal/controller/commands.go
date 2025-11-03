@@ -37,6 +37,8 @@ func (ch *ControllerCommandHandler) HandleCommand(cmd domain.Command) domain.Res
 		return ch.handleGetDeployments(cmd.Params)
 	case "get-deployment":
 		return ch.handleGetDeployment(cmd.Params)
+	case "get-token":
+		return ch.handleGetToken(cmd.Params)
 	case "get-targets":
 		return ch.handleGetTargets(cmd.Params)
 	case "create-deployment":
@@ -91,6 +93,16 @@ func (ch *ControllerCommandHandler) handleGetDeployment(options []byte) domain.R
 	}
 
 	return domain.Response{Success: true, Data: deployments}
+}
+
+func (ch *ControllerCommandHandler) handleGetToken(params []byte) domain.Response {
+	// Generate a temporary token valid for 10 minutes
+	token, err := services.GenerateTemporaryToken("ui", 60*time.Minute)
+	if err != nil {
+		ch.logger.Error("Failed to generate token", "error", err)
+		return domain.Response{Success: false, Message: "Failed to generate token: " + err.Error()}
+	}
+	return domain.Response{Success: true, Data: map[string]string{"token": token}}
 }
 
 func (ch *ControllerCommandHandler) handleGetTargets(params []byte) domain.Response {

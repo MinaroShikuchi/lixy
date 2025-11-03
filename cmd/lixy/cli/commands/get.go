@@ -13,10 +13,9 @@ var getCmd = &cobra.Command{
 }
 
 func init() {
-	// Add subcommands to get
 	getCmd.AddCommand(deploymentsCmd)
 	getCmd.AddCommand(targetsCmd)
-
+	getCmd.AddCommand(tokenCmd)
 	// Add other get subcommands
 	// getCmd.AddCommand(logsCmd)
 }
