@@ -11,6 +11,7 @@ type ControllerRouter struct {
 	agentHandlers      *handlers.AgentHandlers
 	deploymentHandlers *handlers.DeploymentHandlers
 	healthCheckHandler *handlers.HealthCheckHandler
+	logHandlers        *handlers.LogHandlers
 }
 
 func (ce *ControllerRouter) RegisterRoutes(mux *http.ServeMux) {
@@ -22,13 +23,15 @@ func (ce *ControllerRouter) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/deployments", middlewares.AuthMiddleware(middlewares.LoggingMiddleware(ce.deploymentHandlers.CreateOrListDeployments)))
 	mux.HandleFunc("/api/deployments/{name}", middlewares.AuthMiddleware(middlewares.LoggingMiddleware(ce.deploymentHandlers.UpdateDeploymentStatus)))
 	mux.HandleFunc("/admin/agents", middlewares.AuthMiddleware(middlewares.LoggingMiddleware(ce.agentHandlers.ListAgentsHandler)))
+	mux.HandleFunc("/api/logs/stream", middlewares.AuthMiddleware(ce.logHandlers.StreamLogsHandler))
 
 }
 
-func NewControllerRouter(agentHandlers *handlers.AgentHandlers, deploymentHandlers *handlers.DeploymentHandlers, healthcheckHandlers *handlers.HealthCheckHandler) *ControllerRouter {
+func NewControllerRouter(agentHandlers *handlers.AgentHandlers, deploymentHandlers *handlers.DeploymentHandlers, healthcheckHandlers *handlers.HealthCheckHandler, logHandler *handlers.LogHandlers) *ControllerRouter {
 	return &ControllerRouter{
 		agentHandlers:      agentHandlers,
 		deploymentHandlers: deploymentHandlers,
 		healthCheckHandler: healthcheckHandlers,
+		logHandlers:        logHandler,
 	}
 }

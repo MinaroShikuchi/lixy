@@ -69,9 +69,9 @@ func NewControllerClient(version string, port int, logLevel string) *Client {
 	agentHandlers := handlers.NewAgentHandlers(agentService, logger)
 	deploymentHandlers := handlers.NewDeploymentHandlers(deploymentService, logger)
 	healthCheckHandler := handlers.NewHealthCheckHandler(version)
-
+	logHandlers := handlers.NewLogHandlers("/Users/romainpaturet/Git/lixy/cmd/lixy/lixy.log")
 	// Initialize router
-	client.EndpointHandler = controller.NewControllerRouter(agentHandlers, deploymentHandlers, healthCheckHandler)
+	client.EndpointHandler = controller.NewControllerRouter(agentHandlers, deploymentHandlers, healthCheckHandler, logHandlers)
 
 	client.HealthChecker = NewHealthChecker(5*time.Minute, agentStore, logger)
 

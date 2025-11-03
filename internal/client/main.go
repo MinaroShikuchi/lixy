@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
+	"github.com/rs/cors"
 )
 
 // Controller client  handles communication with the agent
@@ -81,9 +82,14 @@ func (c *Client) GetSystemInfo() (*domain.SystemInfo, error) {
 func (c *Client) SetupHttpServer() {
 	mux := http.NewServeMux()
 	c.EndpointHandler.RegisterRoutes(mux)
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"}, // Or "http://localhost:3000"
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Content-Type", "Authorization"},
+	})
 	c.HttpServer = &http.Server{
 		Addr:         ":" + fmt.Sprint(c.Port),
-		Handler:      mux,
+		Handler:      corsHandler.Handler(mux),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  30 * time.Second,
