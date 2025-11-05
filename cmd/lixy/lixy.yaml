@@ -1,0 +1,11 @@
+# Lixy Controller Configuration
+
+name: "Lixy Controller"
+port: 8080
+log_level: "info"
+socket_path: "/tmp/lixy.sock"
+database: "./data/lixy.db"
+log_file: "./logs/lixy.log"
+
+health:
+  check_interval: "5m"

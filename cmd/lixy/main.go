@@ -19,7 +19,7 @@ type Config struct {
 }
 
 func main() {
-	c := client.NewControllerClient(Version, 8080, "info")
+	c := client.NewControllerClient(Version)
 	c.SetupHttpServer()
 	c.SetupSocketServer()
 

@@ -1,0 +1,10 @@
+# Lixies Agent Configuration
+
+name: "Lixy Agent"
+port: 8081
+log_level: "info"
+socket_path: "/tmp/lixies.sock"
+database: "./data/lixies.db"
+
+reconciler:
+  check_interval: "30s"
