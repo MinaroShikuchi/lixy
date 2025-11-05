@@ -61,7 +61,7 @@ jobs:
             pkgpath="${MODULE}/${pkg}" # e.g. github.com/MinaroShikuchi/lixy/cmd/lixy or .../cmd/lixy/cli
 
             # set Version variable in the main package of the target module
-            ldflags="-s -w -X ${pkgpath}/main.Version=${VERSION}"
+            ldflags="-s -w -X main.Version=${VERSION}"
 
             echo "Building ${pkg} -> ${out} (ldflags: ${ldflags})"
             env GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "${ldflags}" -o "${out}" "./${pkg}"
