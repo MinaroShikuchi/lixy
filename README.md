@@ -17,11 +17,10 @@ Lixy is a lightweight GitOps-inspired system for managing container deployments 
 
 ## Future Feature
 
+- [ ] [Feature] Controller should check docker registry for new image version
 - [ ] [Feature] Allow debug mode 
-- [ ] [Fix] versioning with ldflags in CI
 - [ ] [Feature] Add rollback deployment feature
 - [ ] [Feature] Controller web UI
-- [ ] [Feature] Controller should check docker registry for new image version
 - [ ] [Refactor] Clean commands controller, command structure + command options interfaces
 - [ ] [Refactor] Lixies should have a client that set their token in headers
 - [ ] [Feature] Lixies should have a task list to execute docker command.

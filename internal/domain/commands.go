@@ -27,3 +27,22 @@ type DeleteDeploymentOptions struct {
 type GetDeploymentOptions struct {
 	Name string `json:"name"`
 }
+
+type ReconcileEnvironmentDeploymentsOptions struct {
+	Repository  string `json:"repository"`
+	Environment string `json:"environment"`
+}
+
+// Registry credential command options
+type AddRegistryCredentialOptions struct {
+	RegistryType string `json:"registry_type"`
+	Username     string `json:"username"`
+	Token        string `json:"token"`
+}
+
+type ListRegistryCredentialsOptions struct {
+}
+
+type DeleteRegistryCredentialOptions struct {
+	RegistryType string `json:"registry_type"`
+}

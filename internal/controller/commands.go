@@ -15,14 +15,18 @@ type ControllerCommandHandler struct {
 	logger            *slog.Logger
 	agentService      *services.AgentService
 	deploymentService *services.DeploymentService
+	gitopsReconciler  *services.GitOpsReconciler
+	registryService   *services.RegistryService
 	getSystemInfo     func() (*domain.SystemInfo, error)
 }
 
-func NewControllerCommandHandler(logger *slog.Logger, agentService *services.AgentService, deploymentService *services.DeploymentService, GetSystemInfo func() (*domain.SystemInfo, error)) *ControllerCommandHandler {
+func NewControllerCommandHandler(logger *slog.Logger, agentService *services.AgentService, deploymentService *services.DeploymentService, gitopsReconciler *services.GitOpsReconciler, registryService *services.RegistryService, GetSystemInfo func() (*domain.SystemInfo, error)) *ControllerCommandHandler {
 	return &ControllerCommandHandler{
 		logger:            logger,
 		agentService:      agentService,
 		deploymentService: deploymentService,
+		gitopsReconciler:  gitopsReconciler,
+		registryService:   registryService,
 		getSystemInfo:     GetSystemInfo,
 	}
 }
@@ -47,6 +51,14 @@ func (ch *ControllerCommandHandler) HandleCommand(cmd domain.Command) domain.Res
 		return ch.handleUpdateDeployment(cmd.Params)
 	case "delete-deployment":
 		return ch.handleDeleteDeployment(cmd.Params)
+	case "reconcile-environment-deployments":
+		return ch.handleReconcileEnvironmentDeployments(cmd.Params)
+	case "add-registry-credential":
+		return ch.handleAddRegistryCredential(cmd.Params)
+	case "list-registry-credentials":
+		return ch.handleListRegistryCredentials(cmd.Params)
+	case "delete-registry-credential":
+		return ch.handleDeleteRegistryCredential(cmd.Params)
 	default:
 		return domain.Response{Success: false, Message: "Unknown command"}
 	}
@@ -97,7 +109,7 @@ func (ch *ControllerCommandHandler) handleGetDeployment(options []byte) domain.R
 
 func (ch *ControllerCommandHandler) handleGetToken(params []byte) domain.Response {
 	// Generate a temporary token valid for 10 minutes
-	token, err := services.GenerateTemporaryToken("ui", 60*time.Minute)
+	token, err := services.GenerateTemporaryToken("ui", 6*60*time.Minute)
 	if err != nil {
 		ch.logger.Error("Failed to generate token", "error", err)
 		return domain.Response{Success: false, Message: "Failed to generate token: " + err.Error()}
@@ -176,4 +188,125 @@ func (ch *ControllerCommandHandler) handleDeleteDeployment(paramsRaw []byte) dom
 	}
 	ch.logger.Info("Deleted deployment", "name", name)
 	return domain.Response{Success: true, Message: fmt.Sprintf("Deployment %s deleted successfully", name)}
+}
+
+func (ch *ControllerCommandHandler) handleReconcileEnvironmentDeployments(paramsRaw json.RawMessage) domain.Response {
+	var params domain.ReconcileEnvironmentDeploymentsOptions
+	if err := json.Unmarshal(paramsRaw, &params); err != nil {
+		return domain.Response{Success: false, Message: fmt.Sprintf("Invalid parameters for reconcile-environment-deployments: %v", err)}
+	}
+
+	if params.Repository == "" || params.Environment == "" {
+		return domain.Response{Success: false, Message: "Repository and environment are required"}
+	}
+
+	if ch.gitopsReconciler == nil {
+		return domain.Response{Success: false, Message: "GitOps reconciler not available"}
+	}
+
+	ch.logger.Info("Starting environment deployment reconciliation",
+		"repository", params.Repository,
+		"environment", params.Environment)
+
+	err := ch.gitopsReconciler.ReconcileEnvironmentDeployments(params.Repository, params.Environment)
+	if err != nil {
+		ch.logger.Error("Failed to reconcile environment deployments",
+			"repository", params.Repository,
+			"environment", params.Environment,
+			"error", err)
+		return domain.Response{Success: false, Message: "Failed to reconcile environment deployments: " + err.Error()}
+	}
+
+	ch.logger.Info("Successfully reconciled environment deployments",
+		"repository", params.Repository,
+		"environment", params.Environment)
+
+	return domain.Response{
+		Success: true,
+		Message: fmt.Sprintf("Successfully reconciled environment '%s' from repository '%s'", params.Environment, params.Repository),
+		Data: map[string]interface{}{
+			"repository":  params.Repository,
+			"environment": params.Environment,
+		},
+	}
+}
+
+func (ch *ControllerCommandHandler) handleAddRegistryCredential(paramsRaw []byte) domain.Response {
+	var params domain.AddRegistryCredentialOptions
+	if err := json.Unmarshal(paramsRaw, &params); err != nil {
+		return domain.Response{Success: false, Message: fmt.Sprintf("Invalid parameters for add-registry-credential: %v", err)}
+	}
+
+	if params.RegistryType == "" || params.Username == "" || params.Token == "" {
+		return domain.Response{Success: false, Message: "Registry type, username, and token are required"}
+	}
+
+	if ch.registryService == nil {
+		return domain.Response{Success: false, Message: "Registry service not available"}
+	}
+
+	err := ch.registryService.StoreCredential(params.RegistryType, params.Username, params.Token)
+	if err != nil {
+		ch.logger.Error("Failed to store registry credential",
+			"registry", params.RegistryType,
+			"error", err)
+		return domain.Response{Success: false, Message: "Failed to store credential: " + err.Error()}
+	}
+
+	ch.logger.Info("Successfully stored registry credential",
+		"registry", params.RegistryType,
+		"username", params.Username)
+
+	return domain.Response{
+		Success: true,
+		Message: fmt.Sprintf("Successfully added credentials for registry: %s", params.RegistryType),
+	}
+}
+
+func (ch *ControllerCommandHandler) handleListRegistryCredentials(paramsRaw []byte) domain.Response {
+	if ch.registryService == nil {
+		return domain.Response{Success: false, Message: "Registry service not available"}
+	}
+
+	credentials, err := ch.registryService.ListCredentials()
+	if err != nil {
+		ch.logger.Error("Failed to list registry credentials", "error", err)
+		return domain.Response{Success: false, Message: "Failed to list credentials: " + err.Error()}
+	}
+
+	return domain.Response{
+		Success: true,
+		Data:    credentials,
+	}
+}
+
+func (ch *ControllerCommandHandler) handleDeleteRegistryCredential(paramsRaw []byte) domain.Response {
+	var params domain.DeleteRegistryCredentialOptions
+	if err := json.Unmarshal(paramsRaw, &params); err != nil {
+		return domain.Response{Success: false, Message: fmt.Sprintf("Invalid parameters for delete-registry-credential: %v", err)}
+	}
+
+	if params.RegistryType == "" {
+		return domain.Response{Success: false, Message: "Registry type is required"}
+	}
+
+	if ch.registryService == nil {
+		return domain.Response{Success: false, Message: "Registry service not available"}
+	}
+
+	err := ch.registryService.DeleteCredential(params.RegistryType)
+	if err != nil {
+		ch.logger.Error("Failed to delete registry credential",
+			"registry", params.RegistryType,
+			"error", err)
+		return domain.Response{Success: false, Message: "Failed to delete credential: " + err.Error()}
+	}
+
+	ch.logger.Info("Successfully deleted registry credential",
+		"registry", params.RegistryType)
+
+	return domain.Response{
+		Success: true,
+		Message: fmt.Sprintf("Successfully deleted credentials for registry: %s", params.RegistryType),
+	}
 }

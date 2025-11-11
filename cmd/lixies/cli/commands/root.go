@@ -35,4 +35,5 @@ func init() {
 
 	rootCmd.AddCommand(registerCmd)
 	rootCmd.AddCommand(unregisterCmd)
+	rootCmd.AddCommand(checkCmd)
 }

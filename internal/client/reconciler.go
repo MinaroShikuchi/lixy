@@ -41,24 +41,16 @@ func NewDeploymentReconciler(logger *slog.Logger, checkInterval time.Duration, t
 func (reconciler *DeploymentReconciler) Start(ctx context.Context) {
 	reconciler.logger.Info("Starting deployment reconciler...")
 
+	// Run reconciliation immediately on start
+	reconciler.runReconciliation()
+
 	ticker := time.NewTicker(reconciler.checkInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			tokenData, err := reconciler.tokenService.GetToken()
-			if err != nil {
-				reconciler.logger.Error("Failed to get token; skipping reconciliation", "error", err)
-				continue
-			}
-			if tokenData == (store.TokenData{}) {
-				reconciler.logger.Info("No token found; skipping reconciliation")
-				continue
-			}
-			if err := reconciler.reconcile(tokenData); err != nil {
-				reconciler.logger.Error("Failed to reconcile deployments", "error", err)
-			}
+			reconciler.runReconciliation()
 		case <-reconciler.stopCh:
 			ticker.Stop()
 			return
@@ -66,6 +58,22 @@ func (reconciler *DeploymentReconciler) Start(ctx context.Context) {
 			reconciler.logger.Info("Stopping deployment reconciler...")
 			return
 		}
+	}
+}
+
+// runReconciliation performs a single reconciliation cycle
+func (reconciler *DeploymentReconciler) runReconciliation() {
+	tokenData, err := reconciler.tokenService.GetToken()
+	if err != nil {
+		reconciler.logger.Error("Failed to get token; skipping reconciliation", "error", err)
+		return
+	}
+	if tokenData == (store.TokenData{}) {
+		reconciler.logger.Info("No token found; skipping reconciliation")
+		return
+	}
+	if err := reconciler.reconcile(tokenData); err != nil {
+		reconciler.logger.Error("Failed to reconcile deployments", "error", err)
 	}
 }
 
@@ -229,5 +237,5 @@ func (r *DeploymentReconciler) reportStatus(name, status string) {
 		return
 	}
 
-	r.logger.Info("Successfully updated deployment status", "name", name, "status", status)
+	r.logger.Info("Deployment Status updated", "name", name, "status", status)
 }

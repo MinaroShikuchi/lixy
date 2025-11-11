@@ -43,6 +43,12 @@ func (s *DeploymentService) CreateDeployment(name string, targetLXC string, comp
 		return fmt.Errorf("deployment with name '%s' already exists", name)
 	}
 
+	// Verify that the target agent exists
+	_, agentExists := s.agentStore.Get(targetLXC)
+	if !agentExists {
+		return fmt.Errorf("target agent '%s' not found - agent must be registered before creating deployments", targetLXC)
+	}
+
 	err := s.deploymentStore.Create(store.DeploymentInfo{
 		Name:        name,
 		TargetLXC:   targetLXC,
@@ -120,4 +126,15 @@ func (s *DeploymentService) DeleteDeployment(name string) error {
 	}
 
 	return nil
+}
+
+// ListDeploymentsByTarget returns deployments for a specific target agent
+func (s *DeploymentService) ListDeploymentsByTarget(targetLXC string) ([]store.DeploymentInfo, error) {
+	deployments := make([]store.DeploymentInfo, 0)
+	for _, d := range s.deploymentStore.List() {
+		if d.TargetLXC == targetLXC {
+			deployments = append(deployments, d)
+		}
+	}
+	return deployments, nil
 }

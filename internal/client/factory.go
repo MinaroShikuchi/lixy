@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/MinaroShikuchi/lixy/internal/agent"
@@ -16,7 +17,7 @@ func NewControllerClient(version string) *Client {
 	// Load configuration
 	cfg, err := LoadControllerConfig()
 	if err != nil {
-		fmt.Printf("failed to load config: %w", err)
+		fmt.Printf("failed to load config: %v", err)
 		return nil
 	}
 
@@ -47,6 +48,21 @@ func NewControllerClient(version string) *Client {
 		return nil
 	}
 
+	// Initialize config store with encryption key from environment
+	encryptionKey := os.Getenv("LIXY_ENCRYPTION_KEY")
+	if encryptionKey == "" {
+		// Fall back to JWT secret as encryption key
+		encryptionKey = os.Getenv("LIXY_JWT_SECRET")
+	}
+	if encryptionKey == "" {
+		logger.Warn("No encryption key provided via LIXY_ENCRYPTION_KEY or LIXY_JWT_SECRET. Data will not be encrypted.")
+	}
+	configStore, err := store.NewConfigStore(db, encryptionKey)
+	if err != nil {
+		logger.Error("Failed to initialize config store", "error", err)
+		return nil
+	}
+
 	// Initialize token store
 	// tokenStore, err := store.NewTokenStore()
 	// if err != nil {
@@ -62,19 +78,49 @@ func NewControllerClient(version string) *Client {
 	if err != nil {
 		logger.Error("Failed to initialize deployment store", "error", err)
 	}
+
+	// Initialize registry credential store
+	registryCredStore, err := store.NewRegistryCredentialStore(db, encryptionKey)
+	if err != nil {
+		logger.Error("Failed to initialize registry credential store", "error", err)
+		return nil
+	}
+
+	// Get JWT secret for pull token service
+	jwtSecret := []byte(os.Getenv("LIXY_JWT_SECRET"))
+	if len(jwtSecret) == 0 {
+		logger.Warn("LIXY_JWT_SECRET not set, pull token service may not work correctly")
+	}
+
 	// Initialize services
 	agentService := services.NewAgentService(agentStore)
 	deploymentService := services.NewDeploymentService(agentStore, deploymentStore)
+
+	// Git service now uses ConfigStore for persistence
+	gitService := services.NewGitService(logger, configStore)
+	registryService := services.NewRegistryService(logger, registryCredStore)
+	parserService := services.NewGitOpsParser(logger)
+	gitopsReconcilerService := services.NewGitOpsReconciler(logger, gitService, deploymentService, registryService, parserService, agentService)
+
+	// Initialize pull token service
+	pullTokenService := services.NewPullTokenService(logger, registryCredStore, jwtSecret)
+
 	// Initialize command handler
-	client.CommandHandler = controller.NewControllerCommandHandler(client.Logger, agentService, deploymentService, client.GetSystemInfo)
+	client.CommandHandler = controller.NewControllerCommandHandler(client.Logger, agentService, deploymentService, gitopsReconcilerService, registryService, client.GetSystemInfo)
+
 	// Initialize endpoint handlers
 	agentHandlers := handlers.NewAgentHandlers(agentService, logger)
 	deploymentHandlers := handlers.NewDeploymentHandlers(deploymentService, logger)
 	healthCheckHandler := handlers.NewHealthCheckHandler(version)
 	logHandlers := handlers.NewLogHandlers(cfg.LogFile)
-	// Initialize router
-	client.EndpointHandler = controller.NewControllerRouter(agentHandlers, deploymentHandlers, healthCheckHandler, logHandlers)
+	githubHandlers := handlers.NewGitHubHandlers(logger, configStore)
+	gitopsHandlers := handlers.NewGitOpsHandlers(logger, gitService, gitopsReconcilerService)
+	dashboardHandlers := handlers.NewDashboardHandlers(logger, agentService, deploymentService, gitService)
+	pullTokenHandlers := handlers.NewPullTokenHandlers(logger, pullTokenService)
+	registryCredHandlers := handlers.NewRegistryCredentialHandlers(logger, registryCredStore)
 
+	// Initialize router
+	client.EndpointHandler = controller.NewControllerRouter(agentHandlers, deploymentHandlers, healthCheckHandler, logHandlers, githubHandlers, dashboardHandlers, gitopsHandlers, pullTokenHandlers, registryCredHandlers)
 	// parse the health check interval from configuration (string) to time.Duration
 	checkInterval, err := time.ParseDuration(cfg.Health.CheckInterval)
 	if err != nil {
@@ -90,7 +136,7 @@ func NewControllerClient(version string) *Client {
 func NewAgentClient(version string) *Client {
 	cfg, err := LoadAgentConfig()
 	if err != nil {
-		fmt.Printf("failed to load config: %w", err)
+		fmt.Printf("failed to load config: %v", err)
 		panic(err)
 	}
 	// Implementation
@@ -108,6 +154,21 @@ func NewAgentClient(version string) *Client {
 	// Log agent startup with version and configuration details
 	logger.Info(client.Name, "version", version, "logLevel", cfg.LogLevel)
 
+	// Detect and verify container runtime (Docker or Podman)
+	runtime, err := DetectContainerRuntime(logger)
+	if err != nil {
+		logger.Error("Failed to detect container runtime", "error", err)
+		logger.Error("Container runtime check failed - agent will start but deployments may fail",
+			"required", "Docker or Podman must be installed")
+	} else {
+		// Verify compose tool is available
+		if err := VerifyDockerCompose(runtime, logger); err != nil {
+			logger.Warn("Compose tool not found", "error", err)
+			logger.Warn("Deployments requiring docker-compose may fail",
+				"suggestion", "Install docker-compose or podman-compose")
+		}
+	}
+
 	// Initialize database connection
 	db, err := store.InitDB(cfg.Database)
 	if err != nil {
@@ -121,13 +182,25 @@ func NewAgentClient(version string) *Client {
 	}
 	// Initialize services
 	tokenService := services.NewTokenService(tokenStore)
+
+	// Get controller URL and agent name for pull token client
+	tokenData, err := tokenService.GetToken()
+	var pullTokenClient *PullTokenClient
+	if err == nil && tokenData.ControllerURL != "" {
+		// Initialize pull token client with token service for authentication
+		pullTokenClient = NewPullTokenClient(logger, tokenData.ControllerURL, cfg.Name, tokenService)
+		logger.Info("Initialized pull token client", "controller_url", tokenData.ControllerURL)
+	} else {
+		logger.Warn("No controller URL available, pull token client not initialized")
+	}
+
 	// Initialize command handler
 	client.CommandHandler = agent.NewAgentCommandHandler(client.Logger, tokenService, client.GetSystemInfo)
 	// Initialize router
 	client.EndpointHandler = agent.NewAgentRouter()
 
-	// Initialize deployment runner
-	deploymentRunner := NewDeploymentRunner(logger)
+	// Initialize deployment runner with detected runtime and pull token client
+	deploymentRunner := NewDeploymentRunner(logger, runtime, pullTokenClient)
 	// parse the reconciler check interval from configuration (string) to time.Duration
 	checkInterval, err := time.ParseDuration(cfg.Reconciler.CheckInterval)
 	if err != nil {

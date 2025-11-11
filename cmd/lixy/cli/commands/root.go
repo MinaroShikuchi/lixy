@@ -34,4 +34,5 @@ func init() {
 	rootCmd.AddCommand(deleteCmd)
 	rootCmd.AddCommand(healthCmd)
 	rootCmd.AddCommand(registerAgentCmd)
+	rootCmd.AddCommand(reconcileCmd)
 }

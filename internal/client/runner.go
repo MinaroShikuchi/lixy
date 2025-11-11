@@ -1,23 +1,87 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/MinaroShikuchi/lixy/internal/store"
+	"gopkg.in/yaml.v3"
 )
 
 type DeploymentRunner struct {
-	logger *slog.Logger
+	logger          *slog.Logger
+	dockerConfig    string
+	runtime         *ContainerRuntime
+	composeCommand  []string
+	pullTokenClient *PullTokenClient
 }
 
-func NewDeploymentRunner(logger *slog.Logger) *DeploymentRunner {
-	return &DeploymentRunner{
-		logger: logger,
+func NewDeploymentRunner(logger *slog.Logger, runtime *ContainerRuntime, pullTokenClient *PullTokenClient) *DeploymentRunner {
+	runner := &DeploymentRunner{
+		logger:          logger,
+		runtime:         runtime,
+		pullTokenClient: pullTokenClient,
+	}
+
+	// Get the appropriate compose command
+	if runtime != nil {
+		runner.composeCommand = runtime.GetComposeCommand()
+		logger.Info("Detected compose command", "command", strings.Join(runner.composeCommand, " "))
+	} else {
+		// Fallback to docker compose
+		runner.composeCommand = []string{"docker", "compose"}
+		logger.Warn("No runtime detected, defaulting to docker compose")
+	}
+
+	// Setup custom Docker config to avoid credential helper issues
+	if err := runner.setupDockerConfig(); err != nil {
+		logger.Warn("Failed to setup custom Docker config, credential helper errors may occur", "error", err)
+	}
+
+	return runner
+}
+
+// setupDockerConfig creates a custom Docker config directory without credential helpers
+func (runner *DeploymentRunner) setupDockerConfig() error {
+	// Create a temporary docker config directory
+	configDir := filepath.Join(os.TempDir(), "lixy-docker-config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create docker config dir: %w", err)
+	}
+
+	// Create a config.json without credential helpers
+	configPath := filepath.Join(configDir, "config.json")
+	config := map[string]interface{}{
+		"auths": map[string]interface{}{},
+		// Explicitly disable credential helpers
+		"credsStore": "",
+	}
+
+	configData, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal docker config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, configData, 0644); err != nil {
+		return fmt.Errorf("failed to write docker config: %w", err)
+	}
+
+	runner.dockerConfig = configDir
+	runner.logger.Info("Created custom Docker config", "path", configDir)
+	return nil
+}
+
+// prepareDockerCommand sets up environment for docker commands to avoid credential helper issues
+func (runner *DeploymentRunner) prepareDockerCommand(cmd *exec.Cmd) {
+	if runner.dockerConfig != "" {
+		// Set DOCKER_CONFIG to use our custom config
+		cmd.Env = append(os.Environ(), fmt.Sprintf("DOCKER_CONFIG=%s", runner.dockerConfig))
 	}
 }
 
@@ -39,9 +103,20 @@ func (runner *DeploymentRunner) Create(name string, composeYAML []byte) error {
 		return fmt.Errorf("failed to write compose file: %v", err)
 	}
 
+	// Authenticate with private registries before pulling
+	if err := runner.authenticatePrivateRegistries(composeYAML); err != nil {
+		runner.logger.Warn("Failed to authenticate with some registries", "error", err)
+		// Continue anyway - public images might still work
+	}
+
 	// Execute Docker Compose
-	cmd := exec.Command("docker", "compose", "-f", composePath, "-p", name, "up", "-d")
+	args := make([]string, len(runner.composeCommand))
+	copy(args, runner.composeCommand)
+	args = append(args, "-f", composePath, "-p", name, "up", "-d")
+
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = deployDir
+	runner.prepareDockerCommand(cmd)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -67,7 +142,11 @@ func (runner *DeploymentRunner) Delete(name string) error {
 	composePath := filepath.Join(deployDir, "docker-compose.yml")
 
 	// Execute Docker Compose down
-	cmd := exec.Command("docker", "compose", "-f", composePath, "-p", name, "down", "--volumes")
+	args := make([]string, len(runner.composeCommand))
+	copy(args, runner.composeCommand)
+	args = append(args, "-f", composePath, "-p", name, "down", "--volumes")
+	cmd := exec.Command(args[0], args[1:]...)
+	runner.prepareDockerCommand(cmd)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to stop deployment: %v", err)
 	}
@@ -111,7 +190,11 @@ func (runner *DeploymentRunner) ListRunning() ([]store.DeploymentInfo, error) {
 			continue
 		}
 
-		cmd := exec.Command("docker", "compose", "-f", composePath, "-p", deploymentName, "ps", "-q")
+		args := make([]string, len(runner.composeCommand))
+		copy(args, runner.composeCommand)
+		args = append(args, "-f", composePath, "-p", deploymentName, "ps", "-q")
+		cmd := exec.Command(args[0], args[1:]...)
+		runner.prepareDockerCommand(cmd)
 		runner.logger.Info("Checking deployment", "name", deploymentName, "cmd", cmd.String())
 		output, err := cmd.Output()
 		if err != nil || len(output) == 0 {
@@ -142,4 +225,106 @@ func (runner *DeploymentRunner) ListRunning() ([]store.DeploymentInfo, error) {
 	}
 
 	return deployments, nil
+}
+
+// authenticatePrivateRegistries parses the compose file and authenticates with private registries
+func (runner *DeploymentRunner) authenticatePrivateRegistries(composeYAML []byte) error {
+	if runner.pullTokenClient == nil {
+		runner.logger.Debug("No pull token client configured, skipping registry authentication")
+		return nil
+	}
+
+	if runner.runtime == nil {
+		return fmt.Errorf("no container runtime available")
+	}
+
+	// Parse compose file to extract images
+	images, err := runner.extractImagesFromCompose(composeYAML)
+	if err != nil {
+		return fmt.Errorf("failed to extract images from compose file: %w", err)
+	}
+
+	runner.logger.Info("Found images in compose file", "count", len(images), "images", images)
+
+	// Authenticate with each private registry
+	registries := make(map[string]bool)
+	for _, image := range images {
+		isPrivate, registry := IsPrivateRegistry(image)
+		if !isPrivate {
+			runner.logger.Debug("Skipping public image", "image", image)
+			continue
+		}
+
+		// Skip if we've already authenticated with this registry
+		if registries[registry] {
+			continue
+		}
+		registries[registry] = true
+
+		runner.logger.Info("Authenticating with private registry", "registry", registry, "image", image)
+
+		// Get pull token from controller
+		token, err := runner.pullTokenClient.GetPullToken(registry)
+		if err != nil {
+			runner.logger.Error("Failed to get pull token", "registry", registry, "error", err)
+			continue
+		}
+
+		// Authenticate with the registry
+		// The token format from the controller is "username:password"
+		parts := strings.SplitN(token, ":", 2)
+		if len(parts) != 2 {
+			runner.logger.Error("Invalid token format", "registry", registry)
+			continue
+		}
+
+		username, password := parts[0], parts[1]
+		if err := runner.runtime.AuthenticateRegistry(registry, username, password); err != nil {
+			runner.logger.Error("Failed to authenticate with registry", "registry", registry, "error", err)
+			continue
+		}
+
+		runner.logger.Info("Successfully authenticated with registry", "registry", registry)
+	}
+
+	return nil
+}
+
+// extractImagesFromCompose parses a docker-compose.yml and extracts all image references
+func (runner *DeploymentRunner) extractImagesFromCompose(composeYAML []byte) ([]string, error) {
+	var compose map[string]interface{}
+	if err := yaml.Unmarshal(composeYAML, &compose); err != nil {
+		return nil, fmt.Errorf("failed to parse compose file: %w", err)
+	}
+
+	images := []string{}
+
+	// Extract images from services
+	services, ok := compose["services"].(map[string]interface{})
+	if !ok {
+		return images, nil
+	}
+
+	for serviceName, serviceConfig := range services {
+		config, ok := serviceConfig.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Check for image field
+		if image, ok := config["image"].(string); ok {
+			images = append(images, image)
+			runner.logger.Debug("Found image in service", "service", serviceName, "image", image)
+		}
+
+		// Also check for build context with image tag
+		if build, ok := config["build"].(map[string]interface{}); ok {
+			if image, ok := build["image"].(string); ok {
+				images = append(images, image)
+				runner.logger.Debug("Found image in build config", "service", serviceName, "image", image)
+			}
+		}
+	}
+
+	return images, nil
 }
