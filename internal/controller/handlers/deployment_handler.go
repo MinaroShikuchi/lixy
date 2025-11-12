@@ -23,11 +23,12 @@ func NewDeploymentHandlers(deploymentService *services.DeploymentService, logger
 
 // func that handles creating a new deployment or list deployments
 func (dh *DeploymentHandlers) CreateOrListDeployments(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
+	switch r.Method {
+	case http.MethodPost:
 		dh.CreateDeployment(w, r)
-	} else if r.Method == http.MethodGet {
+	case http.MethodGet:
 		dh.ListDeploymentsHandler(w, r)
-	} else {
+	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
@@ -82,12 +83,19 @@ func (dh *DeploymentHandlers) ListDeploymentsHandler(w http.ResponseWriter, r *h
 	}
 }
 
-func (dh *DeploymentHandlers) UpdateDeploymentStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPatch {
+// HandleDeploymentByName routes requests to the appropriate handler based on HTTP method
+func (dh *DeploymentHandlers) HandleDeploymentByName(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPatch:
+		dh.UpdateDeploymentStatus(w, r)
+	case http.MethodDelete:
+		dh.DeleteDeployment(w, r)
+	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
 	}
+}
 
+func (dh *DeploymentHandlers) UpdateDeploymentStatus(w http.ResponseWriter, r *http.Request) {
 	// name is expected to be part of the URL path, e.g., /api/deployments/{name}
 	name := r.URL.Path[len("/api/deployments/"):]
 
@@ -107,4 +115,33 @@ func (dh *DeploymentHandlers) UpdateDeploymentStatus(w http.ResponseWriter, r *h
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// DeleteDeployment handles DELETE requests to remove a deployment
+func (dh *DeploymentHandlers) DeleteDeployment(w http.ResponseWriter, r *http.Request) {
+	// Extract deployment name from URL path, e.g., /api/deployments/{name}
+	name := r.URL.Path[len("/api/deployments/"):]
+	if name == "" {
+		dh.logger.Error("Deployment name not provided in URL")
+		http.Error(w, "Deployment name is required", http.StatusBadRequest)
+		return
+	}
+
+	dh.logger.Info("Deleting deployment", slog.String("deployment", name))
+
+	err := dh.deploymentService.DeleteDeployment(name)
+	if err != nil {
+		dh.logger.Error("Failed to delete deployment", slog.String("deployment", name), slog.String("error", err.Error()))
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	dh.logger.Info("Deployment deleted successfully", slog.String("deployment", name))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Deployment deleted successfully",
+		"name":    name,
+	})
 }

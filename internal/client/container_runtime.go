@@ -42,6 +42,17 @@ func DetectContainerRuntime(logger *slog.Logger) (*ContainerRuntime, error) {
 		if err := cmd.Run(); err == nil {
 			logger.Info("Detected container runtime", "type", "podman")
 
+			// Verify podman-compose is installed (required to avoid docker-compose delegation)
+			if _, err := exec.LookPath("podman-compose"); err != nil {
+				logger.Error("podman-compose not found - required for Podman runtime")
+				return nil, fmt.Errorf("podman-compose is required when using Podman. Install it with: pip install podman-compose")
+			}
+
+			// Configure Podman to use podman-compose instead of delegating to docker-compose
+			if err := setupPodmanComposeProvider(logger); err != nil {
+				logger.Warn("Failed to configure Podman compose provider", "error", err)
+			}
+
 			// Setup Podman socket for Docker compatibility
 			if err := setupPodmanSocket(logger); err != nil {
 				logger.Warn("Failed to setup Podman socket", "error", err)
@@ -108,6 +119,82 @@ exec podman "$@"
 		logger.Warn("~/.local/bin is not in PATH",
 			"suggestion", "Add 'export PATH=$HOME/.local/bin:$PATH' to your shell profile")
 	}
+
+	return nil
+}
+
+// setupPodmanComposeProvider configures Podman to use podman-compose instead of docker-compose
+func setupPodmanComposeProvider(logger *slog.Logger) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	// Create containers config directory
+	configDir := filepath.Join(homeDir, ".config", "containers")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create containers config directory: %w", err)
+	}
+
+	configPath := filepath.Join(configDir, "containers.conf")
+
+	// Check if config already exists and has compose_providers set
+	if data, err := os.ReadFile(configPath); err == nil {
+		content := string(data)
+		if strings.Contains(content, "compose_providers") {
+			logger.Debug("Podman compose provider already configured")
+			return nil
+		}
+	}
+
+	// Read existing config or create new one
+	existingConfig := ""
+	if data, err := os.ReadFile(configPath); err == nil {
+		existingConfig = string(data)
+	}
+
+	// Add compose_providers configuration
+	composeConfig := `
+# Lixy: Configure Podman to use podman-compose instead of docker-compose
+# This prevents delegation to docker-compose which causes authentication issues
+[engine]
+compose_providers=["podman-compose"]
+`
+
+	// Append to existing config or create new
+	newConfig := existingConfig
+	if !strings.Contains(existingConfig, "[engine]") {
+		newConfig += composeConfig
+	} else {
+		// Insert compose_providers into existing [engine] section
+		lines := strings.Split(existingConfig, "\n")
+		var result []string
+		inEngineSection := false
+		added := false
+
+		for _, line := range lines {
+			result = append(result, line)
+			if strings.TrimSpace(line) == "[engine]" {
+				inEngineSection = true
+			} else if inEngineSection && strings.HasPrefix(strings.TrimSpace(line), "[") {
+				inEngineSection = false
+			}
+
+			if inEngineSection && !added && !strings.Contains(line, "compose_providers") {
+				result = append(result, `compose_providers=["podman-compose"]`)
+				added = true
+			}
+		}
+		newConfig = strings.Join(result, "\n")
+	}
+
+	if err := os.WriteFile(configPath, []byte(newConfig), 0644); err != nil {
+		return fmt.Errorf("failed to write containers.conf: %w", err)
+	}
+
+	logger.Info("Configured Podman to use podman-compose",
+		"config", configPath,
+		"note", "Podman will now use podman-compose instead of delegating to docker-compose")
 
 	return nil
 }
@@ -264,15 +351,27 @@ func contains(s, substr string) bool {
 }
 
 // AuthenticateRegistry logs into a container registry with the provided credentials
+// dockerConfigDir is optional - if provided, credentials will be stored there
 func (cr *ContainerRuntime) AuthenticateRegistry(registry, username, token string) error {
+	return cr.AuthenticateRegistryWithConfig(registry, username, token, "")
+}
+
+// AuthenticateRegistryWithConfig logs into a container registry with custom config directory
+func (cr *ContainerRuntime) AuthenticateRegistryWithConfig(registry, username, token, dockerConfigDir string) error {
 	cr.logger.Info("Authenticating with registry",
 		"registry", registry,
-		"username", username)
+		"username", username,
+		"config_dir", dockerConfigDir)
 
 	// Use docker/podman login command
 	cmd := exec.Command(cr.Command, "login", registry,
 		"--username", username,
 		"--password-stdin")
+
+	// Set DOCKER_CONFIG if provided
+	if dockerConfigDir != "" {
+		cmd.Env = append(os.Environ(), fmt.Sprintf("DOCKER_CONFIG=%s", dockerConfigDir))
+	}
 
 	// Pass token via stdin for security
 	cmd.Stdin = strings.NewReader(token)
@@ -287,7 +386,8 @@ func (cr *ContainerRuntime) AuthenticateRegistry(registry, username, token strin
 	}
 
 	cr.logger.Info("Successfully authenticated with registry",
-		"registry", registry)
+		"registry", registry,
+		"config_dir", dockerConfigDir)
 	return nil
 }
 

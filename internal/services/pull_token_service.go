@@ -50,6 +50,7 @@ func NewPullTokenService(
 }
 
 // GeneratePullToken generates a temporary pull token for an agent
+// All registries (including GHCR) now use stored credentials from the registry credential store
 func (s *PullTokenService) GeneratePullToken(agentName, registry string) (*PullTokenResponse, error) {
 	// Validate inputs
 	if agentName == "" {
@@ -59,7 +60,7 @@ func (s *PullTokenService) GeneratePullToken(agentName, registry string) (*PullT
 		return nil, fmt.Errorf("registry cannot be empty")
 	}
 
-	// Retrieve registry credentials from store
+	// Retrieve stored credentials for the registry
 	cred, err := s.credStore.GetCredential(registry)
 	if err != nil {
 		s.logger.Error("Failed to retrieve registry credentials",
@@ -107,7 +108,7 @@ func (s *PullTokenService) GeneratePullToken(agentName, registry string) (*PullT
 
 	// Return response with actual registry token
 	return &PullTokenResponse{
-		Token:     cred.Token, // Return the actual GHCR token
+		Token:     cred.Token,
 		Username:  cred.Username,
 		Registry:  registryURL,
 		ExpiresIn: int(s.tokenTTL.Seconds()),

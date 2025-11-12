@@ -263,28 +263,19 @@ func (runner *DeploymentRunner) authenticatePrivateRegistries(composeYAML []byte
 
 		runner.logger.Info("Authenticating with private registry", "registry", registry, "image", image)
 
-		// Get pull token from controller
-		token, err := runner.pullTokenClient.GetPullToken(registry)
+		// Get pull token and username from controller
+		token, username, err := runner.pullTokenClient.GetPullTokenWithUsername(registry)
 		if err != nil {
 			runner.logger.Error("Failed to get pull token", "registry", registry, "error", err)
 			continue
 		}
 
-		// Authenticate with the registry
-		// The token format from the controller is "username:password"
-		parts := strings.SplitN(token, ":", 2)
-		if len(parts) != 2 {
-			runner.logger.Error("Invalid token format", "registry", registry)
-			continue
-		}
-
-		username, password := parts[0], parts[1]
-		if err := runner.runtime.AuthenticateRegistry(registry, username, password); err != nil {
+		// Authenticate with the registry using the token as password
+		// Use the same docker config directory that docker-compose will use
+		if err := runner.runtime.AuthenticateRegistryWithConfig(registry, username, token, runner.dockerConfig); err != nil {
 			runner.logger.Error("Failed to authenticate with registry", "registry", registry, "error", err)
 			continue
 		}
-
-		runner.logger.Info("Successfully authenticated with registry", "registry", registry)
 	}
 
 	return nil

@@ -78,7 +78,7 @@ func runRegistryAdd(cmd *cobra.Command, args []string) error {
 	registry := args[0]
 
 	// Validate registry type
-	if registry != "ghcr" {
+	if registry != "ghcr.io" {
 		return fmt.Errorf("unsupported registry type: %s (currently only 'ghcr' is supported)", registry)
 	}
 

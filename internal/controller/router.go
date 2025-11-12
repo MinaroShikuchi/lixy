@@ -26,7 +26,7 @@ func (ce *ControllerRouter) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/unregister-agent", middlewares.AuthMiddleware(ce.agentHandlers.UnregisterAgentHandler))
 	mux.HandleFunc("/api/save-agent", middlewares.AuthMiddleware(middlewares.LoggingMiddleware(ce.agentHandlers.SaveAgentHandler)))
 	mux.HandleFunc("/api/deployments", middlewares.AuthMiddleware(middlewares.LoggingMiddleware(ce.deploymentHandlers.CreateOrListDeployments)))
-	mux.HandleFunc("/api/deployments/{name}", middlewares.AuthMiddleware(middlewares.LoggingMiddleware(ce.deploymentHandlers.UpdateDeploymentStatus)))
+	mux.HandleFunc("/api/deployments/{name}", middlewares.AuthMiddleware(middlewares.LoggingMiddleware(ce.deploymentHandlers.HandleDeploymentByName)))
 	mux.HandleFunc("/admin/agents", middlewares.AuthMiddleware(middlewares.LoggingMiddleware(ce.agentHandlers.ListAgentsHandler)))
 	mux.HandleFunc("/api/logs/stream", middlewares.AuthMiddleware(ce.logHandlers.StreamLogsHandler))
 

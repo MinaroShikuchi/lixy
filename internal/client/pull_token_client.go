@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/MinaroShikuchi/lixy/internal/services"
 )
 
@@ -30,22 +31,9 @@ type PullTokenClient struct {
 // CachedToken represents a cached pull token with expiration
 type CachedToken struct {
 	Token     string
+	Username  string
 	ExpiresAt time.Time
 	Registry  string
-}
-
-// PullTokenRequest represents a request for a pull token
-type PullTokenRequest struct {
-	AgentName string `json:"agent_name"`
-	Registry  string `json:"registry"`
-}
-
-// PullTokenResponse represents the response from the controller
-type PullTokenResponse struct {
-	Success   bool   `json:"success"`
-	Token     string `json:"token"`
-	ExpiresIn int    `json:"expires_in"` // seconds
-	Error     string `json:"error,omitempty"`
 }
 
 // NewPullTokenClient creates a new pull token client
@@ -62,8 +50,55 @@ func NewPullTokenClient(logger *slog.Logger, controllerURL, agentName string, to
 	}
 }
 
+// GetPullTokenWithUsername requests a pull token for the specified registry
+// Returns both token and username (cached if still valid, otherwise requests new)
+func (c *PullTokenClient) GetPullTokenWithUsername(registry string) (token, username string, err error) {
+	// Check cache first
+	c.mu.RLock()
+	cached, exists := c.cachedTokens[registry]
+	c.mu.RUnlock()
+
+	if exists && time.Now().Before(cached.ExpiresAt) {
+		c.logger.Debug("Using cached pull token",
+			"registry", registry,
+			"expires_at", cached.ExpiresAt)
+		return cached.Token, cached.Username, nil
+	}
+
+	// Request new token from controller
+	c.logger.Info("Requesting pull token from controller",
+		"registry", registry,
+		"agent", c.agentName)
+
+	tokenData, err := c.requestToken(registry)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to request pull token: %w", err)
+	}
+
+	// Cache the token with a safety margin (expire 1 minute early)
+	expiresAt := time.Now().Add(time.Duration(tokenData.ExpiresIn-60) * time.Second)
+
+	c.mu.Lock()
+	c.cachedTokens[registry] = &CachedToken{
+		Token:     tokenData.Token,
+		Username:  tokenData.Username,
+		ExpiresAt: expiresAt,
+		Registry:  registry,
+	}
+	c.mu.Unlock()
+
+	c.logger.Info("Successfully obtained pull token",
+		"token", tokenData.Token,
+		"username", tokenData.Username,
+		"registry", registry,
+		"expires_at", expiresAt)
+
+	return tokenData.Token, tokenData.Username, nil
+}
+
 // GetPullToken requests a pull token for the specified registry
 // Returns cached token if still valid, otherwise requests a new one
+// Deprecated: Use GetPullTokenWithUsername to also get the username
 func (c *PullTokenClient) GetPullToken(registry string) (string, error) {
 	// Check cache first
 	c.mu.RLock()
@@ -82,51 +117,53 @@ func (c *PullTokenClient) GetPullToken(registry string) (string, error) {
 		"registry", registry,
 		"agent", c.agentName)
 
-	token, expiresIn, err := c.requestToken(registry)
+	tokenData, err := c.requestToken(registry)
 	if err != nil {
 		return "", fmt.Errorf("failed to request pull token: %w", err)
 	}
 
 	// Cache the token with a safety margin (expire 1 minute early)
-	expiresAt := time.Now().Add(time.Duration(expiresIn-60) * time.Second)
+	expiresAt := time.Now().Add(time.Duration(tokenData.ExpiresIn-60) * time.Second)
 
 	c.mu.Lock()
 	c.cachedTokens[registry] = &CachedToken{
-		Token:     token,
+		Token:     tokenData.Token,
+		Username:  tokenData.Username,
 		ExpiresAt: expiresAt,
 		Registry:  registry,
 	}
 	c.mu.Unlock()
 
 	c.logger.Info("Successfully obtained pull token",
+		"username", tokenData.Username,
 		"registry", registry,
 		"expires_at", expiresAt)
 
-	return token, nil
+	return tokenData.Token, nil
 }
 
 // requestToken makes an HTTP request to the controller for a pull token
-func (c *PullTokenClient) requestToken(registry string) (string, int, error) {
+func (c *PullTokenClient) requestToken(registry string) (*domain.PullTokenAPIResponse, error) {
 	// Get agent authentication token
 	tokenData, err := c.tokenService.GetToken()
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to get agent token: %w", err)
+		return nil, fmt.Errorf("failed to get agent token: %w", err)
 	}
 
-	reqBody := PullTokenRequest{
+	reqBody := domain.PullTokenRequest{
 		AgentName: c.agentName,
 		Registry:  registry,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/api/pull-token", c.controllerURL)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -134,29 +171,29 @@ func (c *PullTokenClient) requestToken(registry string) (string, int, error) {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to send request: %w", err)
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("controller returned status: %s", resp.Status)
+		return nil, fmt.Errorf("controller returned status: %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to read response: %w", err)
+		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	var result PullTokenResponse
+	var result domain.PullTokenAPIResponse
 	if err := json.Unmarshal(body, &result); err != nil {
-		return "", 0, fmt.Errorf("failed to decode response: %w", err)
+		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	if !result.Success || resp.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("controller returned error: %s", result.Error)
+		return nil, fmt.Errorf("controller returned error: %s", result.Error)
 	}
 
-	return result.Token, result.ExpiresIn, nil
+	return &result, nil
 }
 
 // ClearCache clears all cached tokens

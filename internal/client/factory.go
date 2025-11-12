@@ -102,7 +102,11 @@ func NewControllerClient(version string) *Client {
 	parserService := services.NewGitOpsParser(logger)
 	gitopsReconcilerService := services.NewGitOpsReconciler(logger, gitService, deploymentService, registryService, parserService, agentService)
 
-	// Initialize pull token service
+	// Initialize GitHub App service (kept for potential GitHub API operations)
+	// Note: Registry authentication now uses stored credentials exclusively
+	_ = services.NewGitHubAppService(logger, configStore)
+
+	// Initialize pull token service with registry credential store
 	pullTokenService := services.NewPullTokenService(logger, registryCredStore, jwtSecret)
 
 	// Initialize command handler
