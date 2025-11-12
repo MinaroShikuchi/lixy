@@ -186,6 +186,7 @@ func NewAgentClient(version string) *Client {
 	}
 	// Initialize services
 	tokenService := services.NewTokenService(tokenStore)
+	registrationService := services.NewAgentRegistrationService(logger, tokenService, client.GetSystemInfo)
 
 	// Get controller URL and agent name for pull token client
 	tokenData, err := tokenService.GetToken()
@@ -198,8 +199,8 @@ func NewAgentClient(version string) *Client {
 		logger.Warn("No controller URL available, pull token client not initialized")
 	}
 
-	// Initialize command handler
-	client.CommandHandler = agent.NewAgentCommandHandler(client.Logger, tokenService, client.GetSystemInfo)
+	// Initialize command handler with registration service
+	client.CommandHandler = agent.NewAgentCommandHandler(client.Logger, registrationService)
 	// Initialize router
 	client.EndpointHandler = agent.NewAgentRouter()
 
