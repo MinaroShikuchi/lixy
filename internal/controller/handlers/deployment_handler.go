@@ -57,19 +57,37 @@ func (dh *DeploymentHandlers) CreateDeployment(w http.ResponseWriter, r *http.Re
 }
 
 // ListDeploymentsHandler handles the listing of all deployments
+// Supports both user and agent authentication
 func (dh *DeploymentHandlers) ListDeploymentsHandler(w http.ResponseWriter, r *http.Request) {
-	agentName, ok := r.Context().Value(domain.AgentNameKey).(string)
-	if !ok {
-		dh.logger.Error("Agent name not found in context")
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+	// Check token type to determine caller
+	tokenType, _ := r.Context().Value("token_type").(string)
+
+	var caller string
+	if tokenType == "user" {
+		// User token - get username
+		username, ok := r.Context().Value("username").(string)
+		if !ok {
+			dh.logger.Error("Username not found in context for user token")
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		caller = "user:" + username
+	} else {
+		// Agent token - get agent name
+		agentName, ok := r.Context().Value(domain.AgentNameKey).(string)
+		if !ok {
+			dh.logger.Error("Agent name not found in context for agent token")
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		caller = "agent:" + agentName
 	}
 
-	dh.logger.Info("Listing deployments for agent", slog.String("agent", agentName))
+	dh.logger.Info("Listing deployments", slog.String("caller", caller))
 
 	deployments, err := dh.deploymentService.ListAllDeployments("")
 	if err != nil {
-		dh.logger.Error("Failed to list deployments", slog.String("agent", agentName), slog.String("error", err.Error()))
+		dh.logger.Error("Failed to list deployments", slog.String("caller", caller), slog.String("error", err.Error()))
 		http.Error(w, "Failed to list deployments", http.StatusInternalServerError)
 		return
 	}
@@ -77,7 +95,7 @@ func (dh *DeploymentHandlers) ListDeploymentsHandler(w http.ResponseWriter, r *h
 	// Return deployments as JSON
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(deployments); err != nil {
-		dh.logger.Error("Failed to encode deployments response", slog.String("agent", agentName), slog.String("error", err.Error()))
+		dh.logger.Error("Failed to encode deployments response", slog.String("caller", caller), slog.String("error", err.Error()))
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}

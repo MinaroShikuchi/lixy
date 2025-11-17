@@ -86,15 +86,28 @@ func NewControllerClient(version string) *Client {
 		return nil
 	}
 
-	// Get JWT secret for pull token service
-	jwtSecret := []byte(os.Getenv("LIXY_JWT_SECRET"))
-	if len(jwtSecret) == 0 {
-		logger.Warn("LIXY_JWT_SECRET not set, pull token service may not work correctly")
+	// Initialize user store
+	userStore, err := store.NewUserStore(db)
+	if err != nil {
+		logger.Error("Failed to initialize user store", "error", err)
+		return nil
+	}
+
+	// Get JWT secret for pull token service and user service
+	jwtSecret := os.Getenv("LIXY_JWT_SECRET")
+	if jwtSecret == "" {
+		logger.Warn("LIXY_JWT_SECRET not set, authentication services may not work correctly")
 	}
 
 	// Initialize services
 	agentService := services.NewAgentService(agentStore)
 	deploymentService := services.NewDeploymentService(agentStore, deploymentStore)
+	userService := services.NewUserService(userStore, jwtSecret)
+
+	// Initialize default admin user if no admin users exist
+	if err := userService.InitializeDefaultAdmin(); err != nil {
+		logger.Error("Failed to initialize default admin user", "error", err)
+	}
 
 	// Git service now uses ConfigStore for persistence
 	gitService := services.NewGitService(logger, configStore)
@@ -107,7 +120,7 @@ func NewControllerClient(version string) *Client {
 	_ = services.NewGitHubAppService(logger, configStore)
 
 	// Initialize pull token service with registry credential store
-	pullTokenService := services.NewPullTokenService(logger, registryCredStore, jwtSecret)
+	pullTokenService := services.NewPullTokenService(logger, registryCredStore, []byte(jwtSecret))
 
 	// Initialize command handler
 	client.CommandHandler = controller.NewControllerCommandHandler(client.Logger, agentService, deploymentService, gitopsReconcilerService, registryService, client.GetSystemInfo)
@@ -122,9 +135,10 @@ func NewControllerClient(version string) *Client {
 	dashboardHandlers := handlers.NewDashboardHandlers(logger, agentService, deploymentService, gitService)
 	pullTokenHandlers := handlers.NewPullTokenHandlers(logger, pullTokenService)
 	registryCredHandlers := handlers.NewRegistryCredentialHandlers(logger, registryCredStore)
+	authHandlers := handlers.NewAuthHandler(userService)
 
 	// Initialize router
-	client.EndpointHandler = controller.NewControllerRouter(agentHandlers, deploymentHandlers, healthCheckHandler, logHandlers, githubHandlers, dashboardHandlers, gitopsHandlers, pullTokenHandlers, registryCredHandlers)
+	client.EndpointHandler = controller.NewControllerRouter(agentHandlers, deploymentHandlers, healthCheckHandler, logHandlers, githubHandlers, dashboardHandlers, gitopsHandlers, pullTokenHandlers, registryCredHandlers, authHandlers, userService)
 	// parse the health check interval from configuration (string) to time.Duration
 	checkInterval, err := time.ParseDuration(cfg.Health.CheckInterval)
 	if err != nil {
