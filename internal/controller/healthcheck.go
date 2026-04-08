@@ -1,23 +1,23 @@
-package client
+package controller
 
 import (
 	"log/slog"
 	"time"
 
+	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/MinaroShikuchi/lixy/internal/services"
-	"github.com/MinaroShikuchi/lixy/internal/store"
 )
 
 // HealthChecker manages periodic health checks for all agents
 type HealthChecker struct {
 	logger        *slog.Logger
-	agentStore    *store.AgentStore
+	agentStore    domain.AgentRepository
 	checkInterval time.Duration
 	stopCh        chan struct{}
 }
 
 // NewHealthChecker creates a new health checker
-func NewHealthChecker(checkInterval time.Duration, agentStore *store.AgentStore, logger *slog.Logger) *HealthChecker {
+func NewHealthChecker(checkInterval time.Duration, agentStore domain.AgentRepository, logger *slog.Logger) *HealthChecker {
 	return &HealthChecker{
 		agentStore:    agentStore,
 		checkInterval: checkInterval,

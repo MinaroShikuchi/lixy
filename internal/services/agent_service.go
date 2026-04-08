@@ -1,23 +1,25 @@
 package services
 
-import "github.com/MinaroShikuchi/lixy/internal/store"
+import (
+	"github.com/MinaroShikuchi/lixy/internal/domain"
+)
 
 type AgentService struct {
-	agentStore *store.AgentStore
+	agentStore domain.AgentRepository
 }
 
-func NewAgentService(agentStore *store.AgentStore) *AgentService {
+func NewAgentService(agentStore domain.AgentRepository) *AgentService {
 	return &AgentService{
 		agentStore: agentStore,
 	}
 }
 
-func (s *AgentService) ListAgents() []store.AgentInfo {
+func (s *AgentService) ListAgents() []domain.AgentInfo {
 	return s.agentStore.List()
 }
 
 func (s *AgentService) CreateAgent(agentName, ip string, port int) error {
-	agent := store.AgentInfo{
+	agent := domain.AgentInfo{
 		Name:     agentName,
 		IP:       ip,
 		Port:     port,

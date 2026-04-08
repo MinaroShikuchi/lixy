@@ -1,4 +1,4 @@
-package client
+package agent
 
 import (
 	"bytes"
@@ -12,7 +12,6 @@ import (
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/MinaroShikuchi/lixy/internal/services"
-	"github.com/MinaroShikuchi/lixy/internal/store"
 )
 
 type DeploymentReconciler struct {
@@ -68,7 +67,7 @@ func (reconciler *DeploymentReconciler) runReconciliation() {
 		reconciler.logger.Error("Failed to get token; skipping reconciliation", "error", err)
 		return
 	}
-	if tokenData == (store.TokenData{}) {
+	if tokenData == (domain.TokenData{}) {
 		reconciler.logger.Info("No token found; skipping reconciliation")
 		return
 	}
@@ -81,7 +80,7 @@ func (reconciler *DeploymentReconciler) Stop() {
 	close(reconciler.stopCh)
 }
 
-func (reconciler *DeploymentReconciler) reconcile(tokenData store.TokenData) error {
+func (reconciler *DeploymentReconciler) reconcile(tokenData domain.TokenData) error {
 	reconciler.logger.Info("Reconciling deployments...")
 
 	req, err := http.NewRequest(
@@ -127,12 +126,12 @@ func (reconciler *DeploymentReconciler) reconcile(tokenData store.TokenData) err
 	return nil
 }
 
-func (r *DeploymentReconciler) reconcileDeployment(desired []domain.DeploymentDto, current []store.DeploymentInfo) error {
-	desiredByName := make(map[string]store.DeploymentInfo)
-	currentByName := make(map[string]store.DeploymentInfo)
+func (r *DeploymentReconciler) reconcileDeployment(desired []domain.DeploymentDto, current []domain.DeploymentInfo) error {
+	desiredByName := make(map[string]domain.DeploymentInfo)
+	currentByName := make(map[string]domain.DeploymentInfo)
 
 	for _, d := range desired {
-		desiredByName[d.Name] = store.DeploymentInfo{
+		desiredByName[d.Name] = domain.DeploymentInfo{
 			ID:          d.ID,
 			Name:        d.Name,
 			TargetLXC:   d.TargetLXC,

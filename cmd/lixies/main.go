@@ -2,64 +2,103 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/MinaroShikuchi/lixy/internal/client"
+	"github.com/MinaroShikuchi/lixy/internal/agent"
+	"github.com/MinaroShikuchi/lixy/internal/daemon"
 )
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "install":
+			if err := daemon.Install(agentDaemonConfig()); err != nil {
+				fmt.Fprintf(os.Stderr, "Installation failed: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "uninstall":
+			purge := len(os.Args) > 2 && os.Args[2] == "--purge"
+			if err := daemon.Uninstall(agentDaemonConfig(), purge); err != nil {
+				fmt.Fprintf(os.Stderr, "Uninstallation failed: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+	}
 
-	c := client.NewAgentClient(Version)
-	c.SetupHttpServer()
-	c.SetupSocketServer()
+	app, err := agent.NewAgentApp(Version)
+	if err != nil {
+		panic(err)
+	}
+	app.Server.SetupHttpServer()
+	app.Server.SetupSocketServer()
 
-	// Create a WaitGroup for coordinating shutdown
 	var wg sync.WaitGroup
-
-	// Create a context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start Unix socket server in a goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.StartSocketServer(ctx)
+		app.Server.StartSocketServer(ctx)
 	}()
 
-	// Start server in a goroutine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c.StartHttpServer()
+		app.Server.StartHttpServer()
 	}()
 
-	// Start the health checker
-	c.Reconciler.Start(ctx)
-	defer c.Reconciler.Stop()
+	// Start the reconciler
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		app.Reconciler.Start(ctx)
+	}()
 
 	// Set up graceful shutdown
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
 	<-signalCh
 
-	c.Logger.Info("Shutting down server...")
+	app.Logger.Info("Shutting down server...")
 
 	// Shutdown HTTP server first
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
-	c.StopHttpServer(shutdownCtx)
-	c.StopSocketServer()
+	app.Server.StopHttpServer(shutdownCtx)
+	app.Server.StopSocketServer()
 
-	// Signal the socket server to stop
+	// Signal all goroutines to stop
 	cancel()
 
 	// Wait for all goroutines to finish
 	wg.Wait()
-	c.Logger.Info("Server shutdown complete")
+	app.Logger.Info("Server shutdown complete")
+}
+
+func agentDaemonConfig() daemon.DaemonConfig {
+	return daemon.DaemonConfig{
+		ServiceName:  "lixies",
+		DisplayName:  "Lixies Agent",
+		Description:  "Lixies GitOps Agent for LXC Container Management",
+		BinaryName:   "lixies",
+		InstallDir:   "/opt/lixies",
+		ConfigDir:    "/etc/lixy",
+		DataDir:      "/var/lib/lixies",
+		LogDir:       "/var/log/lixies",
+		SocketDir:    "/run/lixies",
+		User:         "lixies",
+		Group:        "lixies",
+		EnvVars:      map[string]string{},
+		ConfigSource: "./lixies.yaml",
+		ConfigDest:   "lixies.yaml",
+	}
 }

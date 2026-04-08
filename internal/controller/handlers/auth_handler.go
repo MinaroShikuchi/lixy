@@ -75,7 +75,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 // GetCurrentUser returns information about the currently authenticated user
 func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	// Get user from context (set by auth middleware)
-	userID, ok := r.Context().Value("user_id").(int)
+	userID, ok := r.Context().Value(domain.UserIDKey).(int)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -95,7 +95,7 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 // ChangePassword handles password change for the current user
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	// Get user from context
-	userID, ok := r.Context().Value("user_id").(int)
+	userID, ok := r.Context().Value(domain.UserIDKey).(int)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -130,7 +130,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 // ListUsers returns all users (admin only)
 func (h *AuthHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	// Check if user is admin
-	role, ok := r.Context().Value("user_role").(string)
+	role, ok := r.Context().Value(domain.UserRoleKey).(string)
 	if !ok || role != "admin" {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
@@ -155,7 +155,7 @@ func (h *AuthHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 // GetUser returns a specific user (admin only)
 func (h *AuthHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	// Check if user is admin
-	role, ok := r.Context().Value("user_role").(string)
+	role, ok := r.Context().Value(domain.UserRoleKey).(string)
 	if !ok || role != "admin" {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
@@ -183,7 +183,7 @@ func (h *AuthHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 // CreateUser creates a new user (admin only)
 func (h *AuthHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Check if user is admin
-	role, ok := r.Context().Value("user_role").(string)
+	role, ok := r.Context().Value(domain.UserRoleKey).(string)
 	if !ok || role != "admin" {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
@@ -235,7 +235,7 @@ func (h *AuthHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 // UpdateUser updates a user (admin only)
 func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Check if user is admin
-	role, ok := r.Context().Value("user_role").(string)
+	role, ok := r.Context().Value(domain.UserRoleKey).(string)
 	if !ok || role != "admin" {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
@@ -280,7 +280,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 // ResetPassword resets a user's password (admin only)
 func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	// Check if user is admin
-	role, ok := r.Context().Value("user_role").(string)
+	role, ok := r.Context().Value(domain.UserRoleKey).(string)
 	if !ok || role != "admin" {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
@@ -324,7 +324,7 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 // DeleteUser deletes a user (admin only)
 func (h *AuthHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	// Check if user is admin
-	role, ok := r.Context().Value("user_role").(string)
+	role, ok := r.Context().Value(domain.UserRoleKey).(string)
 	if !ok || role != "admin" {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
@@ -339,7 +339,7 @@ func (h *AuthHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prevent deleting yourself
-	currentUserID, ok := r.Context().Value("user_id").(int)
+	currentUserID, ok := r.Context().Value(domain.UserIDKey).(int)
 	if ok && currentUserID == userID {
 		http.Error(w, "Cannot delete your own account", http.StatusBadRequest)
 		return

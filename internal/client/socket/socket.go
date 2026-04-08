@@ -1,4 +1,4 @@
-// internal/client/socket/client.go - Base functionality
+// internal/client/socket/socket.go - Base functionality
 package socket
 
 import (

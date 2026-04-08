@@ -1,4 +1,4 @@
-package client
+package agent
 
 import (
 	"fmt"
@@ -115,7 +115,7 @@ exec podman "$@"
 
 	// Check if PATH includes ~/.local/bin
 	pathEnv := os.Getenv("PATH")
-	if !contains(pathEnv, localBin) {
+	if !containsSubstr(pathEnv, localBin) {
 		logger.Warn("~/.local/bin is not in PATH",
 			"suggestion", "Add 'export PATH=$HOME/.local/bin:$PATH' to your shell profile")
 	}
@@ -262,9 +262,9 @@ func setupPodmanSocket(logger *slog.Logger) error {
 }
 
 // VerifyDockerCompose checks if docker-compose or podman-compose is available
-func VerifyDockerCompose(runtime *ContainerRuntime, logger *slog.Logger) error {
+func VerifyDockerCompose(rt *ContainerRuntime, logger *slog.Logger) error {
 	// Try docker compose (new plugin syntax)
-	if runtime.Type == "docker" {
+	if rt.Type == "docker" {
 		cmd := exec.Command("docker", "compose", "version")
 		if err := cmd.Run(); err == nil {
 			logger.Info("Docker Compose plugin detected")
@@ -273,7 +273,7 @@ func VerifyDockerCompose(runtime *ContainerRuntime, logger *slog.Logger) error {
 	}
 
 	// Try podman compose (new plugin syntax)
-	if runtime.Type == "podman" {
+	if rt.Type == "podman" {
 		cmd := exec.Command("podman", "compose", "version")
 		if err := cmd.Run(); err == nil {
 			logger.Info("Podman Compose plugin detected")
@@ -343,8 +343,8 @@ func (cr *ContainerRuntime) GetComposeCommand() []string {
 	return []string{cr.Command, "compose"}
 }
 
-// contains checks if a string contains a substring
-func contains(s, substr string) bool {
+// containsSubstr checks if a string contains a substring
+func containsSubstr(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr ||
 		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr)) ||
 		len(s) > len(substr)+1 && s[1:len(substr)+1] == substr)
@@ -463,11 +463,6 @@ func IsPrivateRegistry(image string) (bool, string) {
 	if strings.HasPrefix(image, "ghcr.io/") {
 		return true, "ghcr.io"
 	}
-
-	// Add more private registries as needed
-	// if strings.HasPrefix(image, "gcr.io/") {
-	// 	return true, "gcr.io"
-	// }
 
 	// Docker Hub images without registry prefix are public by default
 	// unless they're in a private organization

@@ -8,6 +8,9 @@ import (
 	"github.com/MinaroShikuchi/lixy/internal/domain"
 )
 
+// Compile-time check that UserStore implements domain.UserRepository
+var _ domain.UserRepository = (*UserStore)(nil)
+
 // UserStore handles database operations for users
 type UserStore struct {
 	db *sql.DB

@@ -1,18 +1,20 @@
 package services
 
-import "github.com/MinaroShikuchi/lixy/internal/store"
+import (
+	"github.com/MinaroShikuchi/lixy/internal/domain"
+)
 
 type TokenService struct {
-	tokenStore *store.TokenStore
+	tokenStore domain.TokenRepository
 }
 
-func NewTokenService(tokenStore *store.TokenStore) *TokenService {
+func NewTokenService(tokenStore domain.TokenRepository) *TokenService {
 	return &TokenService{
 		tokenStore: tokenStore,
 	}
 }
 
-func (s *TokenService) GetToken() (store.TokenData, error) {
+func (s *TokenService) GetToken() (domain.TokenData, error) {
 	return s.tokenStore.Get()
 }
 func (s *TokenService) CreateToken(token, controllerURL string) error {

@@ -5,22 +5,17 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// DeploymentInfo represents information about a deployment with docker compose
-type DeploymentInfo struct {
-	ID          string
-	Name        string
-	TargetLXC   string
-	ComposeYAML []byte
-	Status      string
-}
+// Compile-time check that DeploymentStore implements domain.DeploymentRepository
+var _ domain.DeploymentRepository = (*DeploymentStore)(nil)
 
 // DeploymentStore manages deployments persisted in SQLite
 type DeploymentStore struct {
-	deployments []DeploymentInfo
+	deployments []domain.DeploymentInfo
 	mu          sync.RWMutex
 	db          *sql.DB
 }
@@ -45,7 +40,7 @@ func NewDeploymentStore(db *sql.DB) (*DeploymentStore, error) {
 	}
 
 	// Load existing deployments into memory
-	deployments := []DeploymentInfo{}
+	deployments := []domain.DeploymentInfo{}
 	rows, err := db.Query(`SELECT id, name, target_lxc, status FROM deployments`)
 	if err != nil {
 		db.Close()
@@ -54,7 +49,7 @@ func NewDeploymentStore(db *sql.DB) (*DeploymentStore, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var deployment DeploymentInfo
+		var deployment domain.DeploymentInfo
 		err := rows.Scan(&deployment.ID, &deployment.Name, &deployment.TargetLXC, &deployment.Status)
 		if err != nil {
 			db.Close()
@@ -71,51 +66,66 @@ func NewDeploymentStore(db *sql.DB) (*DeploymentStore, error) {
 }
 
 // ListDeployments returns all deployments from the DB
-func (ds *DeploymentStore) List() []DeploymentInfo {
+func (ds *DeploymentStore) List() ([]domain.DeploymentInfo, error) {
 	if ds == nil || ds.db == nil {
-		return nil
+		return nil, fmt.Errorf("deployment store is not initialized")
 	}
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
 	rows, err := ds.db.Query(`SELECT id, name, target_lxc, status, compose_yml FROM deployments`)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("failed to query deployments: %w", err)
 	}
 	defer rows.Close()
 
-	result := make([]DeploymentInfo, 0)
+	result := make([]domain.DeploymentInfo, 0)
 	for rows.Next() {
-		var d DeploymentInfo
+		var d domain.DeploymentInfo
 		if err := rows.Scan(&d.ID, &d.Name, &d.TargetLXC, &d.Status, &d.ComposeYAML); err != nil {
 			continue
 		}
 		result = append(result, d)
 	}
 	if err := rows.Err(); err != nil {
+		return result, fmt.Errorf("error iterating deployment rows: %w", err)
 	}
-	return result
+	return result, nil
 }
 
 // GetDeployment retrieves a deployment by name
-func (ds *DeploymentStore) Get(name string) (DeploymentInfo, bool) {
+func (ds *DeploymentStore) Get(name string) (domain.DeploymentInfo, bool) {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
-	var d DeploymentInfo
+	var d domain.DeploymentInfo
 	err := ds.db.QueryRow(`SELECT id, name, target_lxc, status, compose_yml FROM deployments WHERE name = ?`, name).
 		Scan(&d.ID, &d.Name, &d.TargetLXC, &d.Status, &d.ComposeYAML)
 	if err == sql.ErrNoRows {
-		return DeploymentInfo{}, false
+		return domain.DeploymentInfo{}, false
 	}
 	if err != nil {
-		return DeploymentInfo{}, false
+		return domain.DeploymentInfo{}, false
 	}
 	return d, true
 }
 
-// AddOrUpdateDeployment adds or updates a deployment in the DB
-func (ds *DeploymentStore) Create(deployment DeploymentInfo) error {
+// Create inserts a new deployment into the DB. Returns an error if a deployment with the same name already exists.
+func (ds *DeploymentStore) Create(deployment domain.DeploymentInfo) error {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	id := uuid.New().String()
+	_, err := ds.db.Exec(`INSERT INTO deployments (id, name, target_lxc, compose_yml, status) VALUES (?, ?, ?, ?, ?)`,
+		id, deployment.Name, deployment.TargetLXC, deployment.ComposeYAML, deployment.Status)
+	if err != nil {
+		return fmt.Errorf("failed to create deployment: %w", err)
+	}
+	return nil
+}
+
+// CreateOrUpdate adds or updates a deployment in the DB
+func (ds *DeploymentStore) CreateOrUpdate(deployment domain.DeploymentInfo) error {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
@@ -144,7 +154,7 @@ func (ds *DeploymentStore) Create(deployment DeploymentInfo) error {
 }
 
 // Update Deployment updates an existing deployment in the DB
-func (ds *DeploymentStore) Update(deployment DeploymentInfo) error {
+func (ds *DeploymentStore) Update(deployment domain.DeploymentInfo) error {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 

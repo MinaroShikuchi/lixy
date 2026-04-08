@@ -13,12 +13,14 @@ import (
 
 type AgentHandlers struct {
 	agentService *services.AgentService
+	authService  *services.AuthService
 	logger       *slog.Logger
 }
 
-func NewAgentHandlers(agentService *services.AgentService, logger *slog.Logger) *AgentHandlers {
+func NewAgentHandlers(agentService *services.AgentService, authService *services.AuthService, logger *slog.Logger) *AgentHandlers {
 	return &AgentHandlers{
 		agentService: agentService,
+		authService:  authService,
 		logger:       logger,
 	}
 }
@@ -81,7 +83,7 @@ func (ah *AgentHandlers) UnregisterAgentHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	agentName := r.Context().Value("agent_name").(string)
+	agentName := r.Context().Value(domain.AgentNameKey).(string)
 
 	if err := ah.agentService.DeleteAgent(agentName); err != nil {
 		http.Error(w, "Failed to unregister agent", http.StatusInternalServerError)

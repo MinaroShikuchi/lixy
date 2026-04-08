@@ -60,12 +60,12 @@ func (dh *DeploymentHandlers) CreateDeployment(w http.ResponseWriter, r *http.Re
 // Supports both user and agent authentication
 func (dh *DeploymentHandlers) ListDeploymentsHandler(w http.ResponseWriter, r *http.Request) {
 	// Check token type to determine caller
-	tokenType, _ := r.Context().Value("token_type").(string)
+	tokenType, _ := r.Context().Value(domain.TokenTypeKey).(string)
 
 	var caller string
 	if tokenType == "user" {
 		// User token - get username
-		username, ok := r.Context().Value("username").(string)
+		username, ok := r.Context().Value(domain.UsernameKey).(string)
 		if !ok {
 			dh.logger.Error("Username not found in context for user token")
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)

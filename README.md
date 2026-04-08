@@ -91,51 +91,58 @@ Lixy follows a controller-agent architecture:
 #### Controller (Lixy)
 
 ```bash
-# Clone the repository
+# Clone and build
 git clone https://github.com/MinaroShikuchi/lixy.git
 cd lixy
-
-# Build the controller
 go build -o lixy ./cmd/lixy
 
 # Set the JWT secret for token signing
 export LIXY_JWT_SECRET=$(openssl rand -base64 32)
-export LIXY_JWT_SECRET=nh91W2iL0wtnxy59EmJ98V4hM7CwGZg6AtjNy/oki9w=
-export GOPATH=/Users/romainpaturet/go
-export PATH=$GOPATH/bin:$PATH
-export PATH="$PATH:/Applications/Docker.app/Contents/Resources/bin/"
-```
 
-```
-# Start the controller
-./lixy
+# Install as system service (creates user, directories, systemd service)
+sudo ./lixy install
+
+# Check status
+sudo systemctl status lixy
+
+# View logs
+sudo tail -f /var/log/lixy/lixy.log
 ```
 
 #### Agent (Lixies)
 
-On each LXC container where you want to run the agent:
+On each LXC container:
 
 ```bash
 # Build the agent
 go build -o lixies ./cmd/lixies
 
-# Register with the controller (get a token from controller first)
-./lixies register --token <YOUR_REGISTRATION_TOKEN> --controller http://controller-ip:8080 --name lxc-101
+# Install as system service
+sudo ./lixies install
 
-# Start the agent service
-sudo cp lixies.service /etc/systemd/system/
-sudo systemctl enable lixies
-sudo systemctl start lixies
+# Check status
+sudo systemctl status lixies
 ```
 
 #### CLI Tool
 
 ```bash
-# Build the CLI tool
-go build -o lixy-cli ./cmd/cli
+# Build the CLI tools
+go build -o lixy-cli ./cmd/lixy/cli
+go build -o lixies-cli ./cmd/lixies/cli
 
 # Test the connection
 ./lixy-cli get targets
+```
+
+#### Uninstall
+
+```bash
+# Stop and remove service (keeps data and config)
+sudo ./lixy uninstall
+
+# Full removal including all data
+sudo ./lixy uninstall --purge
 ```
 
 ### Usage Examples
@@ -201,62 +208,25 @@ export LIXIES_LOG_LEVEL="info"                        # Log level (debug, info, 
 export LIXIES_WORK_DIR="/var/lib/lixies"              # Working directory
 ```
 
-#### Controller Service Configuration
-```
-sudo nano /etc/systemd/system/lixy.service
+#### Systemd Service
+
+Both `lixy` and `lixies` binaries can self-install as systemd services. The `install` subcommand automatically:
+
+- Creates a dedicated system user and group
+- Sets up directories (`/opt/`, `/etc/lixy/`, `/var/lib/`, `/var/log/`)
+- Copies the binary and config file
+- Generates and installs a systemd unit file
+- Enables and starts the service
+
+```bash
+# Install controller as a service
+sudo ./lixy install
+
+# Install agent as a service
+sudo ./lixies install
 ```
 
-```
-[Unit]
-Description=Lixy Controller Service
-After=network.target
-
-[Service]
-Type=simple
-User=lixy
-Group=lixy
-WorkingDirectory=/opt/lixy
-ExecStart=/opt/lixy/lixy
-Restart=on-failure
-RestartSec=10
-StandardOutput=append:/var/log/lixy/lixy.log
-StandardError=append:/var/log/lixy/lixy-error.log
-SyslogIdentifier=lixy
-Environment=PORT=8080
-
-[Install]
-WantedBy=multi-user.target
-```
-
-#### Create a Dedicated User 
-```
-sudo useradd -r -s /bin/false lixy
-```
-
-#### Create Log Directory
-```
-sudo mkdir -p /var/log/lixy
-sudo chown lixy:lixy /var/log/lixy
-```
-
-#### Configure Application Directory and Permissions
-```
-sudo mkdir -p /opt/lixy
-sudo cp /path/to/your/lixy-binary /opt/lixy/lixy
-sudo chown -R lixy:lixy /opt/lixy
-sudo chmod +x /opt/lixy/lixy
-```
-
-#### Enabling and Starting the Service
-
-```
-sudo systemctl daemon-reload
-sudo systemctl enable lixy.service
-# Start the service
-sudo systemctl start lixy.service
-# Check the status
-sudo systemctl status lixy.service
-```
+See the [Installation](#installation) section for full details.
 
 ## Project Structure
 
@@ -264,17 +234,18 @@ sudo systemctl status lixy.service
 lixy/
 ├── README.md
 ├── cmd/                      # Application entry points
-│   ├── lixy/                 # Controller (Lixy) binary entrypoints
+│   ├── lixy/                 # Controller (Lixy) server + install/uninstall
 │   │   └── cli/              # CLI controller command set
-│   └── lixies/               # Agent (lixies) binary entrypoints
+│   └── lixies/               # Agent (Lixies) server + install/uninstall
 │       └── cli/              # CLI agent command set
 └── internal/                 # Private application code (not imported by other projects)
-    ├── agent/                # Agent server, routers and handlers
-    ├── auth/                 # Authentication logic and token management
+    ├── agent/                # Agent server, config, routers and handlers
     ├── client/               # Internal client factory and helpers
-    ├── controller/           # Controller server, routers and handlers (service layer TODO)
+    ├── controller/           # Controller server, config, routers and handlers
+    ├── daemon/               # Self-installing daemon (systemd integration)
     ├── domain/               # Domain interfaces and core types
     ├── middlewares/          # HTTP middleware (logging, auth, etc.)
+    ├── server/               # Shared HTTP/Socket server infrastructure
     ├── services/             # Business logic / service implementations
     └── store/                # Persistence implementations (sqlite, token/agent stores)
 ```

@@ -17,16 +17,18 @@ type ControllerCommandHandler struct {
 	deploymentService *services.DeploymentService
 	gitopsReconciler  *services.GitOpsReconciler
 	registryService   *services.RegistryService
+	authService       *services.AuthService
 	getSystemInfo     func() (*domain.SystemInfo, error)
 }
 
-func NewControllerCommandHandler(logger *slog.Logger, agentService *services.AgentService, deploymentService *services.DeploymentService, gitopsReconciler *services.GitOpsReconciler, registryService *services.RegistryService, GetSystemInfo func() (*domain.SystemInfo, error)) *ControllerCommandHandler {
+func NewControllerCommandHandler(logger *slog.Logger, agentService *services.AgentService, deploymentService *services.DeploymentService, gitopsReconciler *services.GitOpsReconciler, registryService *services.RegistryService, authService *services.AuthService, GetSystemInfo func() (*domain.SystemInfo, error)) *ControllerCommandHandler {
 	return &ControllerCommandHandler{
 		logger:            logger,
 		agentService:      agentService,
 		deploymentService: deploymentService,
 		gitopsReconciler:  gitopsReconciler,
 		registryService:   registryService,
+		authService:       authService,
 		getSystemInfo:     GetSystemInfo,
 	}
 }
@@ -71,7 +73,7 @@ func (ch *ControllerCommandHandler) handleRegisterAgent(params []byte) domain.Re
 	}
 
 	// Generate a registration token
-	token, err := services.GenerateRegistrationToken(time.Duration(options.Expiration))
+	token, err := ch.authService.GenerateRegistrationToken(time.Duration(options.Expiration))
 	if err != nil {
 		ch.logger.Error("Failed to generate registration token", "error", err)
 		return domain.Response{Success: false, Message: "Failed to generate registration token: " + err.Error()}
@@ -94,22 +96,24 @@ func (ch *ControllerCommandHandler) handleGetDeployments(params []byte) domain.R
 	return domain.Response{Success: true, Data: deployments}
 }
 func (ch *ControllerCommandHandler) handleGetDeployment(options []byte) domain.Response {
-	params := make(map[string]string)
-	err := json.Unmarshal(options, &params)
-	if err != nil {
+	var params domain.GetDeploymentOptions
+	if err := json.Unmarshal(options, &params); err != nil {
 		return domain.Response{Success: false, Message: "Failed to unmarshal parameters"}
 	}
-	deployments, err := ch.deploymentService.ListAllDeployments("")
+	if params.Name == "" {
+		return domain.Response{Success: false, Message: "Deployment name is required"}
+	}
+	deployment, err := ch.deploymentService.GetDeployment(params.Name)
 	if err != nil {
-		return domain.Response{Success: false, Message: "Failed to list deployments: " + err.Error()}
+		return domain.Response{Success: false, Message: "Failed to get deployment: " + err.Error()}
 	}
 
-	return domain.Response{Success: true, Data: deployments}
+	return domain.Response{Success: true, Data: deployment}
 }
 
 func (ch *ControllerCommandHandler) handleGetToken(params []byte) domain.Response {
 	// Generate a temporary token valid for 10 minutes
-	token, err := services.GenerateTemporaryToken("ui", 6*60*time.Minute)
+	token, err := ch.authService.GenerateTemporaryToken("ui", 6*60*time.Minute)
 	if err != nil {
 		ch.logger.Error("Failed to generate token", "error", err)
 		return domain.Response{Success: false, Message: "Failed to generate token: " + err.Error()}

@@ -10,10 +10,10 @@ import (
 	"github.com/MinaroShikuchi/lixy/internal/services"
 )
 
-// AuthMiddleware is a unified middleware that accepts both user and agent tokens
-// It tries to validate as a user token first, then falls back to agent token
-// This allows endpoints to be accessed by both web users and agents
-func AuthMiddleware(userService *services.UserService) func(http.HandlerFunc) http.HandlerFunc {
+// AuthMiddleware is a unified middleware that accepts both user and agent tokens.
+// It tries to validate as a user token first, then falls back to agent token.
+// This allows endpoints to be accessed by both web users and agents.
+func AuthMiddleware(userService *services.UserService, authService *services.AuthService) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get token from Authorization header
@@ -37,10 +37,10 @@ func AuthMiddleware(userService *services.UserService) func(http.HandlerFunc) ht
 			if userService != nil {
 				if userClaims, err := userService.ValidateToken(token); err == nil {
 					// Valid user token - add user info to context
-					ctx = context.WithValue(ctx, "user_id", userClaims.UserID)
-					ctx = context.WithValue(ctx, "username", userClaims.Username)
-					ctx = context.WithValue(ctx, "user_role", userClaims.Role)
-					ctx = context.WithValue(ctx, "token_type", "user")
+					ctx = context.WithValue(ctx, domain.UserIDKey, userClaims.UserID)
+					ctx = context.WithValue(ctx, domain.UsernameKey, userClaims.Username)
+					ctx = context.WithValue(ctx, domain.UserRoleKey, userClaims.Role)
+					ctx = context.WithValue(ctx, domain.TokenTypeKey, "user")
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -53,7 +53,7 @@ func AuthMiddleware(userService *services.UserService) func(http.HandlerFunc) ht
 				remoteIP = r.RemoteAddr
 			}
 
-			agentName, err := services.ValidateAgentToken(token, remoteIP)
+			agentName, err := authService.ValidateAgentToken(token, remoteIP)
 			if err != nil {
 				fmt.Printf("Token validation failed: %v\n", err)
 				http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
@@ -62,7 +62,7 @@ func AuthMiddleware(userService *services.UserService) func(http.HandlerFunc) ht
 
 			// Valid agent token - add agent info to context
 			ctx = context.WithValue(ctx, domain.AgentNameKey, agentName)
-			ctx = context.WithValue(ctx, "token_type", "agent")
+			ctx = context.WithValue(ctx, domain.TokenTypeKey, "agent")
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

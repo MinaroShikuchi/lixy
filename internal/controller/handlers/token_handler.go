@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
-	"github.com/MinaroShikuchi/lixy/internal/services"
 )
 
 // GenerateRegistrationTokenHandler creates a time-limited token for agent registration
@@ -36,7 +35,7 @@ func (ah *AgentHandlers) GenerateRegistrationTokenHandler(w http.ResponseWriter,
 	}
 
 	// Generate token
-	token, err := services.GenerateRegistrationToken(duration)
+	token, err := ah.authService.GenerateRegistrationToken(duration)
 	if err != nil {
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
@@ -66,7 +65,7 @@ func (ah *AgentHandlers) RegisterAgentHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	// Validate registration token
-	if _, err := services.ValidateRegistrationToken(req.Token); err != nil {
+	if _, err := ah.authService.ValidateRegistrationToken(req.Token); err != nil {
 		ah.logger.Error("Agent registration failed", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -75,7 +74,7 @@ func (ah *AgentHandlers) RegisterAgentHandler(w http.ResponseWriter, r *http.Req
 	// Generate a new agent name
 	agentName := generateAgentName(req.Hostname)
 	// Generate permanent token for agent
-	permanentToken, err := services.GeneratePermanentToken(agentName)
+	permanentToken, err := ah.authService.GeneratePermanentToken(agentName)
 	if err != nil {
 		http.Error(w, "Failed to generate permanent token", http.StatusInternalServerError)
 		return

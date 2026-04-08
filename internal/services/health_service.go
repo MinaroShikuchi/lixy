@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/MinaroShikuchi/lixy/internal/store"
+	"github.com/MinaroShikuchi/lixy/internal/domain"
 )
 
 // HealthCheckResult represents the response from a lixies health check endpoint
@@ -18,7 +18,7 @@ type HealthCheckResult struct {
 }
 
 // CheckAgentHealth verifies if a lixies agent is alive by calling its healthz endpoint
-func CheckAgentHealth(agent store.AgentInfo, agentStore *store.AgentStore) (bool, string) {
+func CheckAgentHealth(agent domain.AgentInfo, agentStore domain.AgentRepository) (bool, string) {
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

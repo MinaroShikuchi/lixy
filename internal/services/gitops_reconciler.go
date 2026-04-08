@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/MinaroShikuchi/lixy/internal/store"
+	"github.com/MinaroShikuchi/lixy/internal/domain"
 )
 
 // GitOpsReconciler reconciles desired state from Git with actual deployment state
@@ -129,11 +129,11 @@ func (r *GitOpsReconciler) parseDeploymentsFromRepo(repoPath, targetAgent string
 // reconcileDeployments reconciles desired state with current state
 func (r *GitOpsReconciler) reconcileDeployments(
 	desired map[string][]byte,
-	current []store.DeploymentInfo,
+	current []domain.DeploymentInfo,
 	targetAgent string,
 ) error {
 	// Create a map of current deployments by name
-	currentByName := make(map[string]store.DeploymentInfo)
+	currentByName := make(map[string]domain.DeploymentInfo)
 	for _, d := range current {
 		currentByName[d.Name] = d
 	}

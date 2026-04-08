@@ -20,75 +20,136 @@ type ControllerRouter struct {
 	registryCredHandlers *handlers.RegistryCredentialHandlers
 	authHandlers         *handlers.AuthHandler
 	userService          *services.UserService
+	authService          *services.AuthService
 }
 
-func (ce *ControllerRouter) RegisterRoutes(mux *http.ServeMux) {
-	// Create auth middleware with user service
-	authMiddleware := middlewares.AuthMiddleware(ce.userService)
+// RouterDeps groups all dependencies needed to construct a ControllerRouter.
+type RouterDeps struct {
+	AgentHandlers        *handlers.AgentHandlers
+	DeploymentHandlers   *handlers.DeploymentHandlers
+	HealthCheckHandler   *handlers.HealthCheckHandler
+	LogHandlers          *handlers.LogHandlers
+	GitHubHandlers       *handlers.GitHubHandlers
+	DashboardHandlers    *handlers.DashboardHandlers
+	GitOpsHandlers       *handlers.GitOpsHandlers
+	PullTokenHandlers    *handlers.PullTokenHandlers
+	RegistryCredHandlers *handlers.RegistryCredentialHandlers
+	AuthHandlers         *handlers.AuthHandler
+	AuthService          *services.AuthService
+	UserService          *services.UserService
+}
 
+// NewControllerRouter creates a ControllerRouter from a RouterDeps struct.
+func NewControllerRouter(deps RouterDeps) *ControllerRouter {
+	return &ControllerRouter{
+		agentHandlers:        deps.AgentHandlers,
+		deploymentHandlers:   deps.DeploymentHandlers,
+		healthCheckHandler:   deps.HealthCheckHandler,
+		logHandlers:          deps.LogHandlers,
+		githubHandlers:       deps.GitHubHandlers,
+		dashboardHandlers:    deps.DashboardHandlers,
+		gitopsHandlers:       deps.GitOpsHandlers,
+		pullTokenHandlers:    deps.PullTokenHandlers,
+		registryCredHandlers: deps.RegistryCredHandlers,
+		authHandlers:         deps.AuthHandlers,
+		userService:          deps.UserService,
+		authService:          deps.AuthService,
+	}
+}
+
+// RegisterRoutes registers all HTTP routes on the given mux.
+func (ce *ControllerRouter) RegisterRoutes(mux *http.ServeMux) {
+	authMiddleware := middlewares.AuthMiddleware(ce.userService, ce.authService)
+
+	ce.registerHealthRoutes(mux)
+	ce.registerAgentRoutes(mux, authMiddleware)
+	ce.registerDeploymentRoutes(mux, authMiddleware)
+	ce.registerLogRoutes(mux, authMiddleware)
+	ce.registerGitHubRoutes(mux, authMiddleware)
+	ce.registerDashboardRoutes(mux, authMiddleware)
+	ce.registerGitOpsRoutes(mux, authMiddleware)
+	ce.registerPullTokenRoutes(mux, authMiddleware)
+	ce.registerRegistryRoutes(mux, authMiddleware)
+	ce.registerAuthRoutes(mux, authMiddleware)
+}
+
+// authMiddlewareFunc is the type returned by middlewares.AuthMiddleware.
+type authMiddlewareFunc = func(http.HandlerFunc) http.HandlerFunc
+
+// registerHealthRoutes registers health-check endpoints (no auth).
+func (ce *ControllerRouter) registerHealthRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", ce.healthCheckHandler.HealthCheckHandler)
+}
+
+// registerAgentRoutes registers agent management endpoints.
+func (ce *ControllerRouter) registerAgentRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
 	mux.HandleFunc("/api/register-agent", middlewares.LoggingMiddleware(ce.agentHandlers.RegisterAgentHandler))
 	mux.HandleFunc("/api/tokens/registration", ce.agentHandlers.GenerateRegistrationTokenHandler)
-	mux.HandleFunc("/api/unregister-agent", authMiddleware(ce.agentHandlers.UnregisterAgentHandler))
-	mux.HandleFunc("/api/save-agent", authMiddleware(middlewares.LoggingMiddleware(ce.agentHandlers.SaveAgentHandler)))
-	mux.HandleFunc("/api/deployments", authMiddleware(middlewares.LoggingMiddleware(ce.deploymentHandlers.CreateOrListDeployments)))
-	mux.HandleFunc("/api/deployments/{name}", authMiddleware(middlewares.LoggingMiddleware(ce.deploymentHandlers.HandleDeploymentByName)))
-	mux.HandleFunc("/admin/agents", authMiddleware(middlewares.LoggingMiddleware(ce.agentHandlers.ListAgentsHandler)))
-	mux.HandleFunc("/api/logs/stream", authMiddleware(ce.logHandlers.StreamLogsHandler))
+	mux.HandleFunc("/api/unregister-agent", auth(ce.agentHandlers.UnregisterAgentHandler))
+	mux.HandleFunc("/api/save-agent", auth(middlewares.LoggingMiddleware(ce.agentHandlers.SaveAgentHandler)))
+	mux.HandleFunc("/admin/agents", auth(middlewares.LoggingMiddleware(ce.agentHandlers.ListAgentsHandler)))
+}
 
-	// GitHub OAuth routes
+// registerDeploymentRoutes registers deployment CRUD endpoints.
+func (ce *ControllerRouter) registerDeploymentRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
+	mux.HandleFunc("/api/deployments", auth(middlewares.LoggingMiddleware(ce.deploymentHandlers.CreateOrListDeployments)))
+	mux.HandleFunc("/api/deployments/{name}", auth(middlewares.LoggingMiddleware(ce.deploymentHandlers.HandleDeploymentByName)))
+}
+
+// registerLogRoutes registers log streaming endpoints.
+func (ce *ControllerRouter) registerLogRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
+	mux.HandleFunc("/api/logs/stream", auth(ce.logHandlers.StreamLogsHandler))
+}
+
+// registerGitHubRoutes registers GitHub OAuth and config endpoints.
+func (ce *ControllerRouter) registerGitHubRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
 	mux.HandleFunc("/github/auth", middlewares.LoggingMiddleware(ce.githubHandlers.GitHubAuthHandler))
 	mux.HandleFunc("/github/callback", middlewares.LoggingMiddleware(ce.githubHandlers.GitHubCallbackHandler))
-	mux.HandleFunc("/api/github/config", authMiddleware(middlewares.LoggingMiddleware(ce.githubHandlers.GitHubConfigHandler)))
+	mux.HandleFunc("/api/github/config", auth(middlewares.LoggingMiddleware(ce.githubHandlers.GitHubConfigHandler)))
+}
 
-	// Dashboard routes
-	mux.HandleFunc("/api/dashboard/overview", authMiddleware(ce.dashboardHandlers.GetOverview))
-	mux.HandleFunc("/api/dashboard/stats", authMiddleware(ce.dashboardHandlers.GetStats))
-	mux.HandleFunc("/api/dashboard/activity", authMiddleware(ce.dashboardHandlers.GetRecentActivity))
+// registerDashboardRoutes registers dashboard data endpoints.
+func (ce *ControllerRouter) registerDashboardRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
+	mux.HandleFunc("/api/dashboard/overview", auth(ce.dashboardHandlers.GetOverview))
+	mux.HandleFunc("/api/dashboard/stats", auth(ce.dashboardHandlers.GetStats))
+	mux.HandleFunc("/api/dashboard/activity", auth(ce.dashboardHandlers.GetRecentActivity))
+}
 
-	// GitOps routes
-	mux.HandleFunc("/api/gitops/repositories", authMiddleware(ce.gitopsHandlers.HandleRepositories))
-	mux.HandleFunc("/api/gitops/repositories/{name}", authMiddleware(ce.gitopsHandlers.DeleteRepository))
-	mux.HandleFunc("/api/gitops/repositories/{name}/token", authMiddleware(ce.gitopsHandlers.UpdateRepositoryToken))
-	mux.HandleFunc("/api/gitops/repositories/{name}/environments", authMiddleware(ce.gitopsHandlers.GetRepositoryEnvironments))
-	mux.HandleFunc("/api/gitops/sync", authMiddleware(ce.gitopsHandlers.SyncRepository))
-	mux.HandleFunc("/api/gitops/reconcile", authMiddleware(ce.gitopsHandlers.ReconcileRepository))
-	mux.HandleFunc("/api/gitops/reconcile/environment", authMiddleware(ce.gitopsHandlers.ReconcileEnvironment))
-	mux.HandleFunc("/api/gitops/drift", authMiddleware(ce.gitopsHandlers.DetectDrift))
-	mux.HandleFunc("/api/gitops/updates", authMiddleware(ce.gitopsHandlers.CheckUpdates))
+// registerGitOpsRoutes registers GitOps repository and reconciliation endpoints.
+func (ce *ControllerRouter) registerGitOpsRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
+	mux.HandleFunc("/api/gitops/repositories", auth(ce.gitopsHandlers.HandleRepositories))
+	mux.HandleFunc("/api/gitops/repositories/{name}", auth(ce.gitopsHandlers.DeleteRepository))
+	mux.HandleFunc("/api/gitops/repositories/{name}/token", auth(ce.gitopsHandlers.UpdateRepositoryToken))
+	mux.HandleFunc("/api/gitops/repositories/{name}/environments", auth(ce.gitopsHandlers.GetRepositoryEnvironments))
+	mux.HandleFunc("/api/gitops/sync", auth(ce.gitopsHandlers.SyncRepository))
+	mux.HandleFunc("/api/gitops/reconcile", auth(ce.gitopsHandlers.ReconcileRepository))
+	mux.HandleFunc("/api/gitops/reconcile/environment", auth(ce.gitopsHandlers.ReconcileEnvironment))
+	mux.HandleFunc("/api/gitops/drift", auth(ce.gitopsHandlers.DetectDrift))
+	mux.HandleFunc("/api/gitops/updates", auth(ce.gitopsHandlers.CheckUpdates))
+}
 
-	// Pull token routes (agent authentication required)
-	mux.HandleFunc("/api/pull-token", authMiddleware(ce.pullTokenHandlers.RequestPullTokenHandler))
+// registerPullTokenRoutes registers pull-token endpoints.
+func (ce *ControllerRouter) registerPullTokenRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
+	mux.HandleFunc("/api/pull-token", auth(ce.pullTokenHandlers.RequestPullTokenHandler))
+}
 
-	// Registry credential management routes (admin authentication required)
-	mux.HandleFunc("/api/registry/credentials", authMiddleware(ce.registryCredHandlers.HandleCredentials))
+// registerRegistryRoutes registers registry credential management endpoints.
+func (ce *ControllerRouter) registerRegistryRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
+	mux.HandleFunc("/api/registry/credentials", auth(ce.registryCredHandlers.HandleCredentials))
+}
 
-	// Authentication routes (public - no auth required)
+// registerAuthRoutes registers authentication and user management endpoints.
+func (ce *ControllerRouter) registerAuthRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
+	// Public — no auth required
 	mux.HandleFunc("/api/auth/login", middlewares.LoggingMiddleware(ce.authHandlers.Login))
 
 	// User authentication routes (accepts both user and agent tokens)
-	mux.HandleFunc("/api/auth/logout", authMiddleware(ce.authHandlers.Logout))
-	mux.HandleFunc("/api/auth/me", authMiddleware(ce.authHandlers.GetCurrentUser))
-	mux.HandleFunc("/api/auth/change-password", authMiddleware(ce.authHandlers.ChangePassword))
+	mux.HandleFunc("/api/auth/logout", auth(ce.authHandlers.Logout))
+	mux.HandleFunc("/api/auth/me", auth(ce.authHandlers.GetCurrentUser))
+	mux.HandleFunc("/api/auth/change-password", auth(ce.authHandlers.ChangePassword))
 
-	// User management routes (admin only - role checked in handlers)
-	mux.HandleFunc("/api/users", authMiddleware(ce.authHandlers.HandleUsers))
-	mux.HandleFunc("/api/users/{id}", authMiddleware(ce.authHandlers.HandleUserByID))
-	mux.HandleFunc("/api/users/{id}/password", authMiddleware(ce.authHandlers.ResetPassword))
-}
-
-func NewControllerRouter(agentHandlers *handlers.AgentHandlers, deploymentHandlers *handlers.DeploymentHandlers, healthcheckHandlers *handlers.HealthCheckHandler, logHandler *handlers.LogHandlers, githubHandlers *handlers.GitHubHandlers, dashboardHandlers *handlers.DashboardHandlers, gitopsHandlers *handlers.GitOpsHandlers, pullTokenHandlers *handlers.PullTokenHandlers, registryCredHandlers *handlers.RegistryCredentialHandlers, authHandlers *handlers.AuthHandler, userService *services.UserService) *ControllerRouter {
-	return &ControllerRouter{
-		agentHandlers:        agentHandlers,
-		deploymentHandlers:   deploymentHandlers,
-		healthCheckHandler:   healthcheckHandlers,
-		logHandlers:          logHandler,
-		githubHandlers:       githubHandlers,
-		dashboardHandlers:    dashboardHandlers,
-		gitopsHandlers:       gitopsHandlers,
-		pullTokenHandlers:    pullTokenHandlers,
-		registryCredHandlers: registryCredHandlers,
-		authHandlers:         authHandlers,
-		userService:          userService,
-	}
+	// User management routes (admin only — role checked in handlers)
+	mux.HandleFunc("/api/users", auth(ce.authHandlers.HandleUsers))
+	mux.HandleFunc("/api/users/{id}", auth(ce.authHandlers.HandleUserByID))
+	mux.HandleFunc("/api/users/{id}/password", auth(ce.authHandlers.ResetPassword))
 }

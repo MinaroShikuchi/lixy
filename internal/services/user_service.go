@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
-	"github.com/MinaroShikuchi/lixy/internal/store"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -35,12 +34,12 @@ type UserClaims struct {
 
 // UserService handles user authentication and management
 type UserService struct {
-	userStore *store.UserStore
+	userStore domain.UserRepository
 	jwtSecret string
 }
 
 // NewUserService creates a new user service
-func NewUserService(userStore *store.UserStore, jwtSecret string) *UserService {
+func NewUserService(userStore domain.UserRepository, jwtSecret string) *UserService {
 	return &UserService{
 		userStore: userStore,
 		jwtSecret: jwtSecret,

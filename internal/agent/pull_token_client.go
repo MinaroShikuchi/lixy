@@ -1,5 +1,4 @@
-// internal/client/pull_token_client.go
-package client
+package agent
 
 import (
 	"bytes"

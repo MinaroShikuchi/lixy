@@ -4,16 +4,15 @@ import (
 	"fmt"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
-	"github.com/MinaroShikuchi/lixy/internal/store"
 	"gopkg.in/yaml.v3"
 )
 
 type DeploymentService struct {
-	agentStore      *store.AgentStore
-	deploymentStore *store.DeploymentStore
+	agentStore      domain.AgentRepository
+	deploymentStore domain.DeploymentRepository
 }
 
-func NewDeploymentService(agentStore *store.AgentStore, deploymentStore *store.DeploymentStore) *DeploymentService {
+func NewDeploymentService(agentStore domain.AgentRepository, deploymentStore domain.DeploymentRepository) *DeploymentService {
 	return &DeploymentService{
 		agentStore:      agentStore,
 		deploymentStore: deploymentStore,
@@ -21,8 +20,12 @@ func NewDeploymentService(agentStore *store.AgentStore, deploymentStore *store.D
 }
 
 func (s *DeploymentService) ListAllDeployments(targetLXC string) ([]domain.DeploymentDto, error) {
+	storeDeployments, err := s.deploymentStore.List()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list deployments: %w", err)
+	}
 	deployments := make([]domain.DeploymentDto, 0)
-	for _, d := range s.deploymentStore.List() {
+	for _, d := range storeDeployments {
 		if targetLXC != "" && d.TargetLXC != targetLXC {
 			continue
 		}
@@ -37,6 +40,21 @@ func (s *DeploymentService) ListAllDeployments(targetLXC string) ([]domain.Deplo
 	return deployments, nil
 }
 
+// GetDeployment retrieves a single deployment by name
+func (s *DeploymentService) GetDeployment(name string) (*domain.DeploymentDto, error) {
+	d, exists := s.deploymentStore.Get(name)
+	if !exists {
+		return nil, fmt.Errorf("deployment with name '%s' not found", name)
+	}
+	return &domain.DeploymentDto{
+		ID:          d.ID,
+		Name:        d.Name,
+		TargetLXC:   d.TargetLXC,
+		Status:      d.Status,
+		ComposeYAML: d.ComposeYAML,
+	}, nil
+}
+
 func (s *DeploymentService) CreateDeployment(name string, targetLXC string, composeYAML []byte) error {
 	// Update the deployment store
 	if _, exists := s.deploymentStore.Get(name); exists {
@@ -49,7 +67,7 @@ func (s *DeploymentService) CreateDeployment(name string, targetLXC string, comp
 		return fmt.Errorf("target agent '%s' not found - agent must be registered before creating deployments", targetLXC)
 	}
 
-	err := s.deploymentStore.Create(store.DeploymentInfo{
+	err := s.deploymentStore.Create(domain.DeploymentInfo{
 		Name:        name,
 		TargetLXC:   targetLXC,
 		ComposeYAML: composeYAML,
@@ -64,7 +82,7 @@ func (s *DeploymentService) CreateDeployment(name string, targetLXC string, comp
 
 func (s *DeploymentService) UpdateDeployment(name string, composeYAML []byte) error {
 	if deployment, exists := s.deploymentStore.Get(name); exists {
-		err := s.deploymentStore.Update(store.DeploymentInfo{
+		err := s.deploymentStore.Update(domain.DeploymentInfo{
 			Name:        name,
 			TargetLXC:   deployment.TargetLXC,
 			ComposeYAML: composeYAML,
@@ -82,7 +100,7 @@ func (s *DeploymentService) UpdateDeployment(name string, composeYAML []byte) er
 
 func (s *DeploymentService) UpdateDeploymentStatus(name, status string) error {
 	if deployment, exists := s.deploymentStore.Get(name); exists {
-		err := s.deploymentStore.Update(store.DeploymentInfo{
+		err := s.deploymentStore.Update(domain.DeploymentInfo{
 			Name:        name,
 			TargetLXC:   deployment.TargetLXC,
 			ComposeYAML: deployment.ComposeYAML,
@@ -129,9 +147,13 @@ func (s *DeploymentService) DeleteDeployment(name string) error {
 }
 
 // ListDeploymentsByTarget returns deployments for a specific target agent
-func (s *DeploymentService) ListDeploymentsByTarget(targetLXC string) ([]store.DeploymentInfo, error) {
-	deployments := make([]store.DeploymentInfo, 0)
-	for _, d := range s.deploymentStore.List() {
+func (s *DeploymentService) ListDeploymentsByTarget(targetLXC string) ([]domain.DeploymentInfo, error) {
+	storeDeployments, err := s.deploymentStore.List()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list deployments: %w", err)
+	}
+	deployments := make([]domain.DeploymentInfo, 0)
+	for _, d := range storeDeployments {
 		if d.TargetLXC == targetLXC {
 			deployments = append(deployments, d)
 		}

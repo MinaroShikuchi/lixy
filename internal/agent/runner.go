@@ -1,4 +1,4 @@
-package client
+package agent
 
 import (
 	"encoding/json"
@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/MinaroShikuchi/lixy/internal/domain"
-	"github.com/MinaroShikuchi/lixy/internal/store"
 	"gopkg.in/yaml.v3"
 )
 
@@ -159,7 +158,7 @@ func (runner *DeploymentRunner) Delete(name string) error {
 	return nil
 }
 
-func (runner *DeploymentRunner) ListRunning() ([]store.DeploymentInfo, error) {
+func (runner *DeploymentRunner) ListRunning() ([]domain.DeploymentInfo, error) {
 	// List all deployments from the deployment service
 	entries, err := os.ReadDir("./deployments")
 	if err != nil {
@@ -167,7 +166,7 @@ func (runner *DeploymentRunner) ListRunning() ([]store.DeploymentInfo, error) {
 	}
 
 	runner.logger.Info("Scanning deployments directory", "path", "./deployments", "entries", len(entries))
-	deployments := []store.DeploymentInfo{}
+	deployments := []domain.DeploymentInfo{}
 
 	for _, entry := range entries {
 		// Debug log
@@ -183,7 +182,7 @@ func (runner *DeploymentRunner) ListRunning() ([]store.DeploymentInfo, error) {
 
 		// If compose file doesn't exist, treat as not running and append basic info
 		if _, err := os.Stat(composePath); os.IsNotExist(err) {
-			deployments = append(deployments, store.DeploymentInfo{
+			deployments = append(deployments, domain.DeploymentInfo{
 				Name:   deploymentName,
 				Status: "stopped",
 			})
@@ -200,7 +199,7 @@ func (runner *DeploymentRunner) ListRunning() ([]store.DeploymentInfo, error) {
 		if err != nil || len(output) == 0 {
 			runner.logger.Info("Deployment not running", "name", deploymentName, "error", err, "output", string(output))
 			// Append as not running
-			deployments = append(deployments, store.DeploymentInfo{
+			deployments = append(deployments, domain.DeploymentInfo{
 				Name:   deploymentName,
 				Status: "stopped",
 			})
@@ -211,13 +210,13 @@ func (runner *DeploymentRunner) ListRunning() ([]store.DeploymentInfo, error) {
 		composeData, err := os.ReadFile(composePath)
 		if err != nil {
 			// If compose cannot be read, still report as running with minimal info
-			deployments = append(deployments, store.DeploymentInfo{
+			deployments = append(deployments, domain.DeploymentInfo{
 				Name:   deploymentName,
 				Status: "running",
 			})
 			continue
 		}
-		deployments = append(deployments, store.DeploymentInfo{
+		deployments = append(deployments, domain.DeploymentInfo{
 			Name:        deploymentName,
 			ComposeYAML: composeData,
 			Status:      "running",
@@ -302,19 +301,13 @@ func (runner *DeploymentRunner) extractImagesFromCompose(composeYAML []byte) ([]
 			continue
 		}
 
-		// Check for image field
-		if image, ok := config["image"].(string); ok {
-			images = append(images, image)
-			runner.logger.Debug("Found image in service", "service", serviceName, "image", image)
+		image, ok := config["image"].(string)
+		if !ok {
+			continue
 		}
 
-		// Also check for build context with image tag
-		if build, ok := config["build"].(map[string]interface{}); ok {
-			if image, ok := build["image"].(string); ok {
-				images = append(images, image)
-				runner.logger.Debug("Found image in build config", "service", serviceName, "image", image)
-			}
-		}
+		runner.logger.Debug("Found image in compose", "service", serviceName, "image", image)
+		images = append(images, image)
 	}
 
 	return images, nil

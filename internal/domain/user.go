@@ -69,3 +69,19 @@ type ResetPasswordRequest struct {
 	NewPassword string `json:"new_password"`
 	ForceChange bool   `json:"force_change,omitempty"` // Force user to change password on next login
 }
+
+// UserRepository defines the persistence interface for users
+type UserRepository interface {
+	Create(user *User) error
+	GetByID(id int) (*User, error)
+	GetByUsername(username string) (*User, error)
+	GetByEmail(email string) (*User, error)
+	List() ([]*User, error)
+	GetByRole(role string) ([]*User, error)
+	Update(user *User) error
+	UpdatePassword(userID int, passwordHash string) error
+	UpdateLastLogin(userID int) error
+	Delete(id int) error
+	Count() (int, error)
+	CountByRole(role string) (int, error)
+}

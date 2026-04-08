@@ -5,30 +5,18 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
+	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/google/uuid"
 )
 
-// AgentInfo represents the registered agent information
-type AgentInfo struct {
-	ID           string            `json:"id"`
-	Name         string            `json:"name"`
-	IP           string            `json:"ip"`
-	Port         int               `json:"port"`
-	Capabilities map[string]string `json:"capabilities"`
-	FirstSeen    time.Time         `json:"first_seen"`
-	LastSeen     time.Time         `json:"last_seen"`
-	Status       string            `json:"status"` // "online", "offline", "unreachable"
-	Metadata     map[string]string `json:"metadata"`
-}
+// Compile-time check that AgentStore implements domain.AgentRepository
+var _ domain.AgentRepository = (*AgentStore)(nil)
 
-// AgentStore manages agent information persistence
+// AgentStore manages agent information persistence in SQLite
 type AgentStore struct {
-	agents map[string]AgentInfo
-	mutex  sync.RWMutex
-	db     *sql.DB // If using a database
+	db *sql.DB
 }
 
 func NewAgentStore(db *sql.DB) (*AgentStore, error) {
@@ -50,22 +38,112 @@ func NewAgentStore(db *sql.DB) (*AgentStore, error) {
 		return nil, err
 	}
 
-	// Load existing agents into memory
-	agents := make(map[string]AgentInfo)
-	rows, err := db.Query("SELECT id, name, ip, port, capabilities, first_seen, last_seen, status, metadata FROM agents")
+	return &AgentStore{
+		db: db,
+	}, nil
+}
+
+// Create adds a new agent to the store
+func (s *AgentStore) Create(agent domain.AgentInfo) error {
+	// Check if agent already exists
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM agents WHERE name = ?", agent.Name).Scan(&count)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("failed to check existing agent: %w", err)
+	}
+	if count > 0 {
+		return fmt.Errorf("agent with name %s already exists", agent.Name)
+	}
+
+	agent.FirstSeen = time.Now()
+	agent.LastSeen = time.Now()
+
+	// Serialize maps to JSON for storage
+	capabilitiesJSON, _ := json.Marshal(agent.Capabilities)
+	metadataJSON, _ := json.Marshal(agent.Metadata)
+
+	// Insert into database
+	_, err = s.db.Exec(
+		"INSERT INTO agents (id, name, ip, port, capabilities, first_seen, last_seen, status, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		uuid.New().String(), agent.Name, agent.IP, agent.Port, string(capabilitiesJSON), agent.FirstSeen.Unix(), agent.LastSeen.Unix(), agent.Status, string(metadataJSON),
+	)
+
+	return err
+}
+
+// Upsert adds or updates agent information
+func (s *AgentStore) Upsert(agent domain.AgentInfo) error {
+	// Check if agent already exists to preserve first_seen
+	var firstSeenUnix int64
+	err := s.db.QueryRow("SELECT first_seen FROM agents WHERE name = ?", agent.Name).Scan(&firstSeenUnix)
+	if err == sql.ErrNoRows {
+		// New agent — set first seen time
+		agent.FirstSeen = time.Now()
+	} else if err != nil {
+		return fmt.Errorf("failed to check existing agent: %w", err)
+	} else {
+		// Existing agent — preserve first seen time
+		agent.FirstSeen = time.Unix(firstSeenUnix, 0)
+	}
+
+	// Always update last seen
+	agent.LastSeen = time.Now()
+
+	// Serialize maps to JSON for storage
+	capabilitiesJSON, _ := json.Marshal(agent.Capabilities)
+	metadataJSON, _ := json.Marshal(agent.Metadata)
+
+	// Upsert into database
+	_, err = s.db.Exec(
+		"INSERT OR REPLACE INTO agents (id, name, ip, port, capabilities, first_seen, last_seen, status, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		agent.ID, agent.Name, agent.IP, agent.Port, string(capabilitiesJSON), agent.FirstSeen.Unix(), agent.LastSeen.Unix(), agent.Status, string(metadataJSON),
+	)
+
+	return err
+}
+
+// Get retrieves agent information by name
+func (s *AgentStore) Get(name string) (domain.AgentInfo, bool) {
+	var agent domain.AgentInfo
+	var capabilitiesJSON, metadataJSON string
+	var firstSeenUnix, lastSeenUnix int64
+
+	err := s.db.QueryRow(
+		"SELECT id, name, ip, port, capabilities, first_seen, last_seen, status, metadata FROM agents WHERE name = ?",
+		name,
+	).Scan(&agent.ID, &agent.Name, &agent.IP, &agent.Port, &capabilitiesJSON, &firstSeenUnix, &lastSeenUnix, &agent.Status, &metadataJSON)
+
+	if err != nil {
+		return domain.AgentInfo{}, false
+	}
+
+	// Parse JSON fields
+	json.Unmarshal([]byte(capabilitiesJSON), &agent.Capabilities)
+	json.Unmarshal([]byte(metadataJSON), &agent.Metadata)
+
+	agent.FirstSeen = time.Unix(firstSeenUnix, 0)
+	agent.LastSeen = time.Unix(lastSeenUnix, 0)
+
+	return agent, true
+}
+
+// List returns all registered agents
+func (s *AgentStore) List() []domain.AgentInfo {
+	rows, err := s.db.Query("SELECT id, name, ip, port, capabilities, first_seen, last_seen, status, metadata FROM agents")
+	if err != nil {
+		return nil
 	}
 	defer rows.Close()
 
+	agents := make([]domain.AgentInfo, 0)
 	for rows.Next() {
-		var agent AgentInfo
+		var agent domain.AgentInfo
 		var capabilitiesJSON, metadataJSON string
 		var firstSeenUnix, lastSeenUnix int64
 
 		err := rows.Scan(&agent.ID, &agent.Name, &agent.IP, &agent.Port, &capabilitiesJSON, &firstSeenUnix, &lastSeenUnix, &agent.Status, &metadataJSON)
 		if err != nil {
-			return nil, err
+			continue
 		}
 
 		// Parse JSON fields
@@ -75,115 +153,26 @@ func NewAgentStore(db *sql.DB) (*AgentStore, error) {
 		agent.FirstSeen = time.Unix(firstSeenUnix, 0)
 		agent.LastSeen = time.Unix(lastSeenUnix, 0)
 
-		agents[agent.Name] = agent
-	}
-
-	return &AgentStore{
-		agents: agents,
-		mutex:  sync.RWMutex{},
-		db:     db,
-	}, nil
-}
-
-// Adds a new agent to the store
-func (s *AgentStore) Create(agent AgentInfo) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	// Check if agent already exists
-	existing, exists := s.agents[agent.Name]
-	if exists {
-		// Preserve first seen time if agent already exists
-		agent.FirstSeen = existing.FirstSeen
-		return fmt.Errorf("agent with name %s already exists", agent.Name)
-	}
-	agent.FirstSeen = time.Now()
-	agent.LastSeen = time.Now()
-	// Update in-memory cache
-	s.agents[agent.Name] = agent
-
-	// Serialize maps to JSON for storage
-	capabilitiesJSON, _ := json.Marshal(agent.Capabilities)
-	metadataJSON, _ := json.Marshal(agent.Metadata)
-
-	// Update database
-	_, err := s.db.Exec(
-		"INSERT INTO agents (id, name, ip, port, capabilities, first_seen, last_seen, status, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		uuid.New().String(), agent.Name, agent.IP, agent.Port, string(capabilitiesJSON), agent.FirstSeen.Unix(), agent.LastSeen.Unix(), agent.Status, string(metadataJSON),
-	)
-
-	return err
-}
-
-// UpsertAgent adds or updates agent information
-func (s *AgentStore) Upsert(agent AgentInfo) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	// Check if agent already exists
-	existing, exists := s.agents[agent.Name]
-	if exists {
-		// Preserve first seen time if agent already exists
-		agent.FirstSeen = existing.FirstSeen
-	} else {
-		// Set first seen time for new agents
-		agent.FirstSeen = time.Now()
-	}
-
-	// Always update last seen
-	agent.LastSeen = time.Now()
-
-	// Update in-memory cache
-	s.agents[agent.Name] = agent
-
-	// Serialize maps to JSON for storage
-	capabilitiesJSON, _ := json.Marshal(agent.Capabilities)
-	metadataJSON, _ := json.Marshal(agent.Metadata)
-
-	// Update database
-	_, err := s.db.Exec(
-		"INSERT OR REPLACE INTO agents (id, name, ip, port, capabilities, first_seen, last_seen, status, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		agent.ID, agent.Name, agent.IP, agent.Port, string(capabilitiesJSON), agent.FirstSeen.Unix(), agent.LastSeen.Unix(), agent.Status, string(metadataJSON),
-	)
-
-	return err
-}
-
-// Retrieves agent information by ID
-func (s *AgentStore) Get(name string) (AgentInfo, bool) {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
-	agent, exists := s.agents[name]
-	return agent, exists
-}
-
-// ListAgents returns all registered agents
-func (s *AgentStore) List() []AgentInfo {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
-	agents := make([]AgentInfo, 0, len(s.agents))
-	for _, agent := range s.agents {
 		agents = append(agents, agent)
 	}
 
 	return agents
 }
 
-// Delete an existing agent from the store
+// Delete removes an existing agent from the store
 func (s *AgentStore) Delete(name string) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	result, err := s.db.Exec("DELETE FROM agents WHERE name = ?", name)
+	if err != nil {
+		return err
+	}
 
-	_, exists := s.agents[name]
-	if !exists {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
 		return fmt.Errorf("agent with name %s does not exist", name)
 	}
-	// Remove from in-memory cache
-	delete(s.agents, name)
 
-	// Remove from database
-	_, err := s.db.Exec("DELETE FROM agents WHERE name = ?", name)
-	return err
+	return nil
 }

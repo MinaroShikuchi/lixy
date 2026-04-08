@@ -1,4 +1,4 @@
-// internal/store/_token_store.go
+// internal/store/token_store.go
 package store
 
 import (
@@ -6,19 +6,16 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/MinaroShikuchi/lixy/internal/domain"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// Compile-time check that TokenStore implements domain.TokenRepository
+var _ domain.TokenRepository = (*TokenStore)(nil)
+
 type TokenStore struct {
 	db *sql.DB
-}
-
-// TokenData represents the authentication token data
-type TokenData struct {
-	Token         string    `json:"token"`
-	IssuedAt      time.Time `json:"issued_at"`
-	ControllerURL string    `json:"controller_url"`
 }
 
 // NewTokenStore creates a new -based token store
@@ -61,18 +58,18 @@ func (s *TokenStore) Create(token, controllerURL string) error {
 }
 
 // Get retrieves a token from the SQLite database
-func (s *TokenStore) Get() (TokenData, error) {
+func (s *TokenStore) Get() (domain.TokenData, error) {
 	row := s.db.QueryRow("SELECT token, issued_at, controller_url FROM tokens")
 
-	var data TokenData
+	var data domain.TokenData
 	var issuedAtUnix int64
 
 	err := row.Scan(&data.Token, &issuedAtUnix, &data.ControllerURL)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return TokenData{}, nil
+			return domain.TokenData{}, nil
 		}
-		return TokenData{}, fmt.Errorf("failed to load token: %w", err)
+		return domain.TokenData{}, fmt.Errorf("failed to load token: %w", err)
 	}
 
 	data.IssuedAt = time.Unix(issuedAtUnix, 0)
