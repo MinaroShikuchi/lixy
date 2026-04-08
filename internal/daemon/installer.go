@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -109,6 +111,12 @@ func Install(cfg DaemonConfig) error {
 	if err := updateConfigPaths(cfg); err != nil {
 		stepWarn(fmt.Sprintf("Could not update config paths: %v", err))
 		// Non-fatal — the service may still work with defaults
+	}
+
+	// Step 6b: Generate environment file with secrets
+	if err := generateEnvFile(cfg); err != nil {
+		stepWarn(fmt.Sprintf("Could not generate environment file: %v", err))
+		// Non-fatal — user can set env vars manually
 	}
 
 	// Step 7: Set ownership
@@ -386,6 +394,68 @@ func updateConfigPaths(cfg DaemonConfig) error {
 		return fmt.Errorf("could not write updated config: %w", err)
 	}
 
+	return nil
+}
+
+// generateRandomKey generates a cryptographically random 32-byte key, base64-encoded.
+func generateRandomKey() (string, error) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return "", fmt.Errorf("could not generate random key: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(key), nil
+}
+
+// generateEnvFile creates an environment file with auto-generated secrets
+// if one doesn't already exist. The file is referenced by the systemd unit
+// via EnvironmentFile= directive.
+func generateEnvFile(cfg DaemonConfig) error {
+	envPath := filepath.Join(cfg.ConfigDir, cfg.ServiceName+".env")
+
+	// Don't overwrite existing env file (secrets should be preserved)
+	if _, err := os.Stat(envPath); err == nil {
+		stepInfo(fmt.Sprintf("Environment file already exists at %s, skipping (won't overwrite)", envPath))
+		return nil
+	}
+
+	var lines []string
+
+	// Generate LIXY_JWT_SECRET if not already set in environment
+	jwtSecret := os.Getenv("LIXY_JWT_SECRET")
+	if jwtSecret == "" {
+		var err error
+		jwtSecret, err = generateRandomKey()
+		if err != nil {
+			return fmt.Errorf("could not generate JWT secret: %w", err)
+		}
+		stepOK("Generated new LIXY_JWT_SECRET")
+	} else {
+		stepInfo("Using LIXY_JWT_SECRET from current environment")
+	}
+	lines = append(lines, fmt.Sprintf("LIXY_JWT_SECRET=%s", jwtSecret))
+
+	// Generate LIXY_ENCRYPTION_KEY if not already set in environment
+	encKey := os.Getenv("LIXY_ENCRYPTION_KEY")
+	if encKey == "" {
+		var err error
+		encKey, err = generateRandomKey()
+		if err != nil {
+			return fmt.Errorf("could not generate encryption key: %w", err)
+		}
+		stepOK("Generated new LIXY_ENCRYPTION_KEY")
+	} else {
+		stepInfo("Using LIXY_ENCRYPTION_KEY from current environment")
+	}
+	lines = append(lines, fmt.Sprintf("LIXY_ENCRYPTION_KEY=%s", encKey))
+
+	content := strings.Join(lines, "\n") + "\n"
+
+	// Write with restrictive permissions (only owner can read)
+	if err := os.WriteFile(envPath, []byte(content), 0600); err != nil {
+		return fmt.Errorf("could not write environment file: %w", err)
+	}
+
+	stepOK(fmt.Sprintf("Created environment file: %s", envPath))
 	return nil
 }
 

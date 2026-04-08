@@ -23,6 +23,7 @@ RestartSec=10
 StandardOutput=append:{{.LogDir}}/{{.ServiceName}}.log
 StandardError=append:{{.LogDir}}/{{.ServiceName}}-error.log
 SyslogIdentifier={{.ServiceName}}
+EnvironmentFile=-{{.ConfigDir}}/{{.ServiceName}}.env
 {{- range $key, $value := .EnvVars}}
 Environment="{{$key}}={{$value}}"
 {{- end}}
