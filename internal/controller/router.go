@@ -13,11 +13,11 @@ type ControllerRouter struct {
 	deploymentHandlers   *handlers.DeploymentHandlers
 	healthCheckHandler   *handlers.HealthCheckHandler
 	logHandlers          *handlers.LogHandlers
-	githubHandlers       *handlers.GitHubHandlers
 	dashboardHandlers    *handlers.DashboardHandlers
 	gitopsHandlers       *handlers.GitOpsHandlers
 	pullTokenHandlers    *handlers.PullTokenHandlers
 	registryCredHandlers *handlers.RegistryCredentialHandlers
+	harborHandlers       *handlers.HarborHandlers
 	authHandlers         *handlers.AuthHandler
 	userService          *services.UserService
 	authService          *services.AuthService
@@ -29,11 +29,11 @@ type RouterDeps struct {
 	DeploymentHandlers   *handlers.DeploymentHandlers
 	HealthCheckHandler   *handlers.HealthCheckHandler
 	LogHandlers          *handlers.LogHandlers
-	GitHubHandlers       *handlers.GitHubHandlers
 	DashboardHandlers    *handlers.DashboardHandlers
 	GitOpsHandlers       *handlers.GitOpsHandlers
 	PullTokenHandlers    *handlers.PullTokenHandlers
 	RegistryCredHandlers *handlers.RegistryCredentialHandlers
+	HarborHandlers       *handlers.HarborHandlers
 	AuthHandlers         *handlers.AuthHandler
 	AuthService          *services.AuthService
 	UserService          *services.UserService
@@ -46,11 +46,11 @@ func NewControllerRouter(deps RouterDeps) *ControllerRouter {
 		deploymentHandlers:   deps.DeploymentHandlers,
 		healthCheckHandler:   deps.HealthCheckHandler,
 		logHandlers:          deps.LogHandlers,
-		githubHandlers:       deps.GitHubHandlers,
 		dashboardHandlers:    deps.DashboardHandlers,
 		gitopsHandlers:       deps.GitOpsHandlers,
 		pullTokenHandlers:    deps.PullTokenHandlers,
 		registryCredHandlers: deps.RegistryCredHandlers,
+		harborHandlers:       deps.HarborHandlers,
 		authHandlers:         deps.AuthHandlers,
 		userService:          deps.UserService,
 		authService:          deps.AuthService,
@@ -65,11 +65,11 @@ func (ce *ControllerRouter) RegisterRoutes(mux *http.ServeMux) {
 	ce.registerAgentRoutes(mux, authMiddleware)
 	ce.registerDeploymentRoutes(mux, authMiddleware)
 	ce.registerLogRoutes(mux, authMiddleware)
-	ce.registerGitHubRoutes(mux, authMiddleware)
 	ce.registerDashboardRoutes(mux, authMiddleware)
 	ce.registerGitOpsRoutes(mux, authMiddleware)
 	ce.registerPullTokenRoutes(mux, authMiddleware)
 	ce.registerRegistryRoutes(mux, authMiddleware)
+	ce.registerHarborRoutes(mux, authMiddleware)
 	ce.registerAuthRoutes(mux, authMiddleware)
 }
 
@@ -101,13 +101,6 @@ func (ce *ControllerRouter) registerLogRoutes(mux *http.ServeMux, auth authMiddl
 	mux.HandleFunc("/api/logs/stream", auth(ce.logHandlers.StreamLogsHandler))
 }
 
-// registerGitHubRoutes registers GitHub OAuth and config endpoints.
-func (ce *ControllerRouter) registerGitHubRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
-	mux.HandleFunc("/github/auth", middlewares.LoggingMiddleware(ce.githubHandlers.GitHubAuthHandler))
-	mux.HandleFunc("/github/callback", middlewares.LoggingMiddleware(ce.githubHandlers.GitHubCallbackHandler))
-	mux.HandleFunc("/api/github/config", auth(middlewares.LoggingMiddleware(ce.githubHandlers.GitHubConfigHandler)))
-}
-
 // registerDashboardRoutes registers dashboard data endpoints.
 func (ce *ControllerRouter) registerDashboardRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
 	mux.HandleFunc("/api/dashboard/overview", auth(ce.dashboardHandlers.GetOverview))
@@ -136,6 +129,17 @@ func (ce *ControllerRouter) registerPullTokenRoutes(mux *http.ServeMux, auth aut
 // registerRegistryRoutes registers registry credential management endpoints.
 func (ce *ControllerRouter) registerRegistryRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
 	mux.HandleFunc("/api/registry/credentials", auth(ce.registryCredHandlers.HandleCredentials))
+}
+
+// registerHarborRoutes registers Harbor registry integration endpoints.
+func (ce *ControllerRouter) registerHarborRoutes(mux *http.ServeMux, auth authMiddlewareFunc) {
+	mux.HandleFunc("/api/harbor/config", auth(ce.harborHandlers.HandleConfig))
+	mux.HandleFunc("/api/harbor/projects", auth(ce.harborHandlers.ListProjects))
+	mux.HandleFunc("/api/harbor/repositories", auth(ce.harborHandlers.ListRepositories))
+	mux.HandleFunc("/api/harbor/repositories/{project}/{repo}/tags", auth(ce.harborHandlers.ListTags))
+	mux.HandleFunc("/api/harbor/mappings", auth(ce.harborHandlers.HandleMappings))
+	mux.HandleFunc("/api/harbor/mappings/{name}", auth(ce.harborHandlers.DeleteMapping))
+	mux.HandleFunc("/api/harbor/sync", auth(ce.harborHandlers.Sync))
 }
 
 // registerAuthRoutes registers authentication and user management endpoints.

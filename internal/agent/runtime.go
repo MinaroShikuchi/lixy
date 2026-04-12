@@ -457,14 +457,22 @@ func (cr *ContainerRuntime) PullImage(image string) error {
 	return nil
 }
 
-// IsPrivateRegistry determines if an image is from a private registry
+// IsPrivateRegistry determines if an image is from a private registry.
+// An image is considered private when its first path component looks like a
+// hostname (contains a '.' or ':', or equals "localhost"). Docker Hub images
+// such as "nginx" or "myorg/myimage" do not match and are treated as public.
 func IsPrivateRegistry(image string) (bool, string) {
-	// Check if image starts with a known private registry
-	if strings.HasPrefix(image, "ghcr.io/") {
-		return true, "ghcr.io"
+	// Strip tag/digest to get the bare image reference
+	ref := strings.SplitN(image, ":", 2)[0]
+	ref = strings.SplitN(ref, "@", 2)[0]
+
+	// The first slash-delimited component is the potential hostname
+	first := strings.SplitN(ref, "/", 2)[0]
+
+	// A component is a hostname if it contains a dot, a colon (port), or is "localhost"
+	if strings.ContainsAny(first, ".:") || first == "localhost" {
+		return true, first
 	}
 
-	// Docker Hub images without registry prefix are public by default
-	// unless they're in a private organization
 	return false, ""
 }

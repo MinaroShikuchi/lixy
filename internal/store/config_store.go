@@ -197,46 +197,6 @@ func (cs *ConfigStore) loadConfig() error {
 	return rows.Err()
 }
 
-// SetGitHubConfig stores GitHub App configuration securely
-func (cs *ConfigStore) SetGitHubConfig(clientID, clientSecret, privateKey, redirectURI string) error {
-	if err := cs.Set("github.client_id", clientID); err != nil {
-		return fmt.Errorf("failed to store client_id: %w", err)
-	}
-	if clientSecret != "" {
-		if err := cs.Set("github.client_secret", clientSecret); err != nil {
-			return fmt.Errorf("failed to store client_secret: %w", err)
-		}
-	}
-	if privateKey != "" {
-		if err := cs.Set("github.private_key", privateKey); err != nil {
-			return fmt.Errorf("failed to store private_key: %w", err)
-		}
-	}
-	if redirectURI != "" {
-		if err := cs.Set("github.redirect_uri", redirectURI); err != nil {
-			return fmt.Errorf("failed to store redirect_uri: %w", err)
-		}
-	}
-	return nil
-}
-
-// GetGitHubConfig retrieves GitHub App configuration
-func (cs *ConfigStore) GetGitHubConfig() (clientID, clientSecret, privateKey, redirectURI string) {
-	clientID, _ = cs.Get("github.client_id")
-	clientSecret, _ = cs.Get("github.client_secret")
-	privateKey, _ = cs.Get("github.private_key")
-	redirectURI, _ = cs.Get("github.redirect_uri")
-	return
-}
-
-// IsGitHubConfigured checks if GitHub App is configured
-func (cs *ConfigStore) IsGitHubConfigured() bool {
-	clientID, _ := cs.Get("github.client_id")
-	clientSecret, _ := cs.Get("github.client_secret")
-	privateKey, _ := cs.Get("github.private_key")
-	return clientID != "" && (clientSecret != "" || privateKey != "")
-}
-
 // GitRepositoryConfig represents a Git repository configuration
 type GitRepositoryConfig struct {
 	Name      string `json:"name"`

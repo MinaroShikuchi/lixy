@@ -107,18 +107,6 @@ func (h *RegistryCredentialHandlers) StoreCredentialHandler(w http.ResponseWrite
 		return
 	}
 
-	// Currently only support GHCR
-	if req.Registry != "ghcr" {
-		h.logger.Warn("Unsupported registry type", "registry", req.Registry)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(GenericResponse{
-			Success: false,
-			Error:   "Unsupported registry type. Currently only 'ghcr' is supported",
-		})
-		return
-	}
-
 	// Store credentials
 	err := h.credStore.StoreCredential(req.Registry, req.Username, req.Token)
 	if err != nil {

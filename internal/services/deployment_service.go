@@ -146,6 +146,14 @@ func (s *DeploymentService) DeleteDeployment(name string) error {
 	return nil
 }
 
+// CreateOrUpdateDeployment creates a deployment if it doesn't exist, or updates it if it does.
+func (s *DeploymentService) CreateOrUpdateDeployment(name, targetLXC string, composeYAML []byte) error {
+	if _, exists := s.deploymentStore.Get(name); exists {
+		return s.UpdateDeployment(name, composeYAML)
+	}
+	return s.CreateDeployment(name, targetLXC, composeYAML)
+}
+
 // ListDeploymentsByTarget returns deployments for a specific target agent
 func (s *DeploymentService) ListDeploymentsByTarget(targetLXC string) ([]domain.DeploymentInfo, error) {
 	storeDeployments, err := s.deploymentStore.List()

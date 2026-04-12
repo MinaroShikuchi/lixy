@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -66,27 +65,13 @@ func (h *PullTokenHandlers) RequestPullTokenHandler(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Validate and check registry type
-	switch req.Registry {
-	case "":
+	// Validate registry
+	if req.Registry == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(domain.PullTokenAPIResponse{
 			Success: false,
-			Error:   "Registry type is required",
-		})
-		return
-	case "ghcr.io":
-		// Supported registry, continue
-	default:
-		h.logger.Warn("Unsupported registry type requested",
-			"agent", agentName,
-			"registry", req.Registry)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(domain.PullTokenAPIResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Unsupported registry type '%s'. Currently only 'ghcr.io' is supported", req.Registry),
+			Error:   "Registry is required",
 		})
 		return
 	}

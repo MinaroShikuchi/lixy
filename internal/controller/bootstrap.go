@@ -73,6 +73,12 @@ func NewControllerApp(version string) (*ControllerApp, error) {
 		return nil, fmt.Errorf("failed to initialize registry credential store: %w", err)
 	}
 
+	// Initialize Harbor mapping store
+	harborMappingStore, err := store.NewHarborMappingStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize harbor mapping store: %w", err)
+	}
+
 	// Initialize user store
 	userStore, err := store.NewUserStore(db)
 	if err != nil {
@@ -98,15 +104,14 @@ func NewControllerApp(version string) (*ControllerApp, error) {
 		logger.Error("Failed to initialize default admin user", "error", err)
 	}
 
+	// Initialize Harbor service
+	harborService := services.NewHarborService(logger, harborMappingStore, registryCredStore, configStore, deploymentService)
+
 	// Git service now uses ConfigStore for persistence
 	gitService := services.NewGitService(logger, configStore)
 	registryService := services.NewRegistryService(logger, registryCredStore)
 	parserService := services.NewGitOpsParser(logger)
 	gitopsReconcilerService := services.NewGitOpsReconciler(logger, gitService, deploymentService, registryService, parserService, agentService)
-
-	// Initialize GitHub App service (kept for potential GitHub API operations)
-	// Note: Registry authentication now uses stored credentials exclusively
-	_ = services.NewGitHubAppService(logger, configStore)
 
 	// Initialize pull token service with registry credential store
 	pullTokenService := services.NewPullTokenService(logger, registryCredStore, []byte(jwtSecret))
@@ -124,11 +129,11 @@ func NewControllerApp(version string) (*ControllerApp, error) {
 	deploymentHandlers := handlers.NewDeploymentHandlers(deploymentService, logger)
 	healthCheckHandler := handlers.NewHealthCheckHandler(version)
 	logHandlers := handlers.NewLogHandlers(cfg.LogFile)
-	githubHandlers := handlers.NewGitHubHandlers(logger, configStore)
 	gitopsHandlers := handlers.NewGitOpsHandlers(logger, gitService, gitopsReconcilerService)
 	dashboardHandlers := handlers.NewDashboardHandlers(logger, agentService, deploymentService, gitService)
 	pullTokenHandlers := handlers.NewPullTokenHandlers(logger, pullTokenService)
 	registryCredHandlers := handlers.NewRegistryCredentialHandlers(logger, registryCredStore)
+	harborHandlers := handlers.NewHarborHandlers(logger, harborService)
 	authHandlers := handlers.NewAuthHandler(userService)
 
 	// Initialize router
@@ -137,11 +142,11 @@ func NewControllerApp(version string) (*ControllerApp, error) {
 		DeploymentHandlers:   deploymentHandlers,
 		HealthCheckHandler:   healthCheckHandler,
 		LogHandlers:          logHandlers,
-		GitHubHandlers:       githubHandlers,
 		DashboardHandlers:    dashboardHandlers,
 		GitOpsHandlers:       gitopsHandlers,
 		PullTokenHandlers:    pullTokenHandlers,
 		RegistryCredHandlers: registryCredHandlers,
+		HarborHandlers:       harborHandlers,
 		AuthHandlers:         authHandlers,
 		AuthService:          authService,
 		UserService:          userService,
