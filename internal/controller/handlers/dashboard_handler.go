@@ -38,6 +38,7 @@ type DashboardOverview struct {
 		Total      int `json:"total"`
 		Online     int `json:"online"`
 		Offline    int `json:"offline"`
+		Degraded   int `json:"degraded"`
 		Registered int `json:"registered"`
 	} `json:"agents"`
 	Deployments struct {
@@ -71,12 +72,14 @@ func (h *DashboardHandlers) GetOverview(w http.ResponseWriter, r *http.Request) 
 	overview.Agents.Total = len(agents)
 	overview.Agents.Registered = len(agents)
 
-	// Count online/offline agents (simple health check)
+	// Count agents by status
 	for _, agent := range agents {
-		// You could enhance this with actual health checks
-		if agent.IP != "" {
+		switch agent.Status {
+		case "online":
 			overview.Agents.Online++
-		} else {
+		case "degraded":
+			overview.Agents.Degraded++
+		default:
 			overview.Agents.Offline++
 		}
 	}

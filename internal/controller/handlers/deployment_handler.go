@@ -92,9 +92,31 @@ func (dh *DeploymentHandlers) ListDeploymentsHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	// Return deployments as JSON
+	type deploymentResponse struct {
+		ID           string   `json:"id"`
+		Name         string   `json:"name"`
+		Status       string   `json:"status"`
+		TargetAgents []string `json:"target_agents"`
+		ComposeFile  string   `json:"compose_file"`
+	}
+
+	result := make([]deploymentResponse, 0, len(deployments))
+	for _, d := range deployments {
+		targets := []string{}
+		if d.TargetLXC != "" {
+			targets = []string{d.TargetLXC}
+		}
+		result = append(result, deploymentResponse{
+			ID:           d.ID,
+			Name:         d.Name,
+			Status:       d.Status,
+			TargetAgents: targets,
+			ComposeFile:  string(d.ComposeYAML),
+		})
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(deployments); err != nil {
+	if err := json.NewEncoder(w).Encode(result); err != nil {
 		dh.logger.Error("Failed to encode deployments response", slog.String("caller", caller), slog.String("error", err.Error()))
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
