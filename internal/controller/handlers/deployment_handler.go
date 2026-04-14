@@ -92,26 +92,21 @@ func (dh *DeploymentHandlers) ListDeploymentsHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	type deploymentResponse struct {
-		ID           string   `json:"id"`
-		Name         string   `json:"name"`
-		Status       string   `json:"status"`
-		TargetAgents []string `json:"target_agents"`
-		ComposeFile  string   `json:"compose_file"`
-	}
-
-	result := make([]deploymentResponse, 0, len(deployments))
+	result := make([]domain.DeploymentDto, 0, len(deployments))
 	for _, d := range deployments {
 		targets := []string{}
 		if d.TargetLXC != "" {
 			targets = []string{d.TargetLXC}
 		}
-		result = append(result, deploymentResponse{
+		composeStr := string(d.ComposeYAML)
+		result = append(result, domain.DeploymentDto{
 			ID:           d.ID,
 			Name:         d.Name,
 			Status:       d.Status,
+			TargetLXC:    d.TargetLXC,
 			TargetAgents: targets,
-			ComposeFile:  string(d.ComposeYAML),
+			ComposeYAML:  composeStr,
+			ComposeFile:  composeStr,
 		})
 	}
 
@@ -128,11 +123,46 @@ func (dh *DeploymentHandlers) HandleDeploymentByName(w http.ResponseWriter, r *h
 	switch r.Method {
 	case http.MethodPatch:
 		dh.UpdateDeploymentStatus(w, r)
+	case http.MethodPut:
+		dh.UpdateDeploymentCompose(w, r)
 	case http.MethodDelete:
 		dh.DeleteDeployment(w, r)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// UpdateDeploymentCompose handles PUT /api/deployments/{name} to update compose YAML
+func (dh *DeploymentHandlers) UpdateDeploymentCompose(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Path[len("/api/deployments/"):]
+	if name == "" {
+		http.Error(w, "Deployment name is required", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		ComposeYAML string `json:"compose_yaml"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.ComposeYAML == "" {
+		http.Error(w, "compose_yaml is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := dh.deploymentService.UpdateDeployment(name, []byte(req.ComposeYAML)); err != nil {
+		dh.logger.Error("Failed to update deployment compose", "deployment", name, "error", err)
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Deployment compose updated",
+	})
 }
 
 func (dh *DeploymentHandlers) UpdateDeploymentStatus(w http.ResponseWriter, r *http.Request) {

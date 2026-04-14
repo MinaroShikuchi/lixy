@@ -34,7 +34,7 @@ func (s *DeploymentService) ListAllDeployments(targetLXC string) ([]domain.Deplo
 			Name:        d.Name,
 			TargetLXC:   d.TargetLXC,
 			Status:      d.Status,
-			ComposeYAML: d.ComposeYAML,
+			ComposeYAML: string(d.ComposeYAML),
 		})
 	}
 	return deployments, nil
@@ -51,7 +51,7 @@ func (s *DeploymentService) GetDeployment(name string) (*domain.DeploymentDto, e
 		Name:        d.Name,
 		TargetLXC:   d.TargetLXC,
 		Status:      d.Status,
-		ComposeYAML: d.ComposeYAML,
+		ComposeYAML: string(d.ComposeYAML),
 	}, nil
 }
 

@@ -344,11 +344,11 @@ func (s *HarborService) syncMapping(mapping domain.HarborMapping) SyncResult {
 
 // generateComposeYAML produces a docker-compose YAML for the given mapping and tag.
 func (s *HarborService) generateComposeYAML(mapping domain.HarborMapping, tag string) ([]byte, error) {
-	base, err := s.harborURL()
+	hostname, err := s.harborHostname()
 	if err != nil {
 		return nil, err
 	}
-	image := fmt.Sprintf("%s/%s/%s:%s", base, mapping.Project, mapping.Repository, tag)
+	image := fmt.Sprintf("%s/%s/%s:%s", hostname, mapping.Project, mapping.Repository, tag)
 
 	if mapping.ComposeTemplate != "" {
 		tmpl, err := template.New("compose").Parse(mapping.ComposeTemplate)

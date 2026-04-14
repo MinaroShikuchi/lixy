@@ -25,11 +25,13 @@ type DeploymentResponse struct {
 
 // DeploymentDto is the data transfer object for deployments
 type DeploymentDto struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	TargetLXC   string `json:"target_lxc"`
-	Status      string `json:"status"`
-	ComposeYAML []byte `json:"compose_yaml"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	TargetLXC    string   `json:"target_lxc"`
+	TargetAgents []string `json:"target_agents"`
+	Status       string   `json:"status"`
+	ComposeYAML  string   `json:"compose_yaml"`
+	ComposeFile  string   `json:"compose_file"`
 }
 
 // DeploymentStatusUpdate represents a status update for a deployment

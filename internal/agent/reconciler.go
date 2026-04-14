@@ -135,7 +135,7 @@ func (r *DeploymentReconciler) reconcileDeployment(desired []domain.DeploymentDt
 			ID:          d.ID,
 			Name:        d.Name,
 			TargetLXC:   d.TargetLXC,
-			ComposeYAML: d.ComposeYAML,
+			ComposeYAML: []byte(d.ComposeYAML),
 			Status:      d.Status,
 		}
 	}
