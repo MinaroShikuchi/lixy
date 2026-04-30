@@ -45,7 +45,7 @@ type DeploymentStatusUpdate struct {
 type CreateDeploymentRequest struct {
 	Name        string            `json:"name"`
 	ComposeYAML string            `json:"compose_yaml"`
-	TargetLXC   string            `json:"target_lxc"`
+	TargetLXC   []string          `json:"target_lxc"`
 	EnvVars     map[string]string `json:"env_vars,omitempty"`
 }
 

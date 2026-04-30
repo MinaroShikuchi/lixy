@@ -42,7 +42,11 @@ func (dh *DeploymentHandlers) CreateDeployment(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	err := dh.deploymentService.CreateDeployment(req.Name, req.TargetLXC, []byte(req.ComposeYAML), req.EnvVars)
+	if len(req.TargetLXC) == 0 {
+		http.Error(w, "target_lxc is required", http.StatusBadRequest)
+		return
+	}
+	err := dh.deploymentService.CreateDeployment(req.Name, req.TargetLXC[0], []byte(req.ComposeYAML), req.EnvVars)
 	if err != nil {
 		dh.logger.Error("Failed to create deployment", slog.String("error", err.Error()))
 		http.Error(w, "Failed to create deployment", http.StatusInternalServerError)
