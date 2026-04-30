@@ -84,13 +84,11 @@ func (runner *DeploymentRunner) prepareDockerCommand(cmd *exec.Cmd) {
 	}
 }
 
-func (runner *DeploymentRunner) Create(name string, composeYAML []byte) error {
-	// Get the absolute path to your application root directory
+func (runner *DeploymentRunner) Create(name string, composeYAML []byte, envVars map[string]string) error {
 	appRoot, err := filepath.Abs(".")
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path: %v", err)
 	}
-	// Create deployment directory using absolute path
 	deployDir := filepath.Join(appRoot, "deployments", name)
 	if err := os.MkdirAll(deployDir, 0755); err != nil {
 		return fmt.Errorf("failed to create deployment directory: %v", err)
@@ -102,10 +100,20 @@ func (runner *DeploymentRunner) Create(name string, composeYAML []byte) error {
 		return fmt.Errorf("failed to write compose file: %v", err)
 	}
 
+	// Write .env file so docker-compose resolves ${VAR} references
+	envPath := filepath.Join(deployDir, ".env")
+	if len(envVars) > 0 {
+		if err := runner.writeEnvFile(envPath, envVars); err != nil {
+			return fmt.Errorf("failed to write .env file: %v", err)
+		}
+	} else {
+		// Remove stale .env from a previous deploy that had secrets
+		_ = os.Remove(envPath)
+	}
+
 	// Authenticate with private registries before pulling
 	if err := runner.authenticatePrivateRegistries(composeYAML); err != nil {
 		runner.logger.Warn("Failed to authenticate with some registries", "error", err)
-		// Continue anyway - public images might still work
 	}
 
 	// Execute Docker Compose
@@ -125,9 +133,19 @@ func (runner *DeploymentRunner) Create(name string, composeYAML []byte) error {
 	return nil
 }
 
+// writeEnvFile writes key=value pairs to a .env file with 0600 permissions.
+func (runner *DeploymentRunner) writeEnvFile(path string, envVars map[string]string) error {
+	var sb strings.Builder
+	for k, v := range envVars {
+		// Escape double-quotes inside the value, then wrap in double-quotes
+		escaped := strings.ReplaceAll(v, `"`, `\"`)
+		sb.WriteString(fmt.Sprintf("%s=\"%s\"\n", k, escaped))
+	}
+	return os.WriteFile(path, []byte(sb.String()), 0600)
+}
+
 func (runner *DeploymentRunner) Update(deployment domain.DeploymentRequest) error {
-	// For simplicity, we treat update the same as create in this example
-	return runner.Create(deployment.Name, deployment.ComposeYAML)
+	return runner.Create(deployment.Name, deployment.ComposeYAML, deployment.EnvVars)
 }
 
 func (runner *DeploymentRunner) Delete(name string) error {

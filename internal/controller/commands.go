@@ -158,7 +158,7 @@ func (ch *ControllerCommandHandler) handleCreateDeployment(paramsRaw []byte) dom
 	// 	response = domain.Response{Success: false, Message: "Invalid compose file: " + err.Error()}
 	// 	break
 	// }
-	err := ch.deploymentService.CreateDeployment(params.Name, params.TargetLXC, params.ComposeYAML)
+	err := ch.deploymentService.CreateDeployment(params.Name, params.TargetLXC, params.ComposeYAML, nil)
 	if err != nil {
 		return domain.Response{Success: false, Message: "Deployment failed: " + err.Error()}
 	}
@@ -171,7 +171,7 @@ func (ch *ControllerCommandHandler) handleUpdateDeployment(paramsRaw []byte) dom
 		return domain.Response{Success: false, Message: fmt.Sprintf("Invalid parameters for update-deployment: %v", err)}
 	}
 
-	err := ch.deploymentService.UpdateDeployment(params.Name, params.ComposeYAML)
+	err := ch.deploymentService.UpdateDeployment(params.Name, params.ComposeYAML, nil)
 	if err != nil {
 		return domain.Response{Success: false, Message: "Update failed: " + err.Error()}
 	}

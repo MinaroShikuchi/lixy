@@ -42,7 +42,7 @@ func (dh *DeploymentHandlers) CreateDeployment(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	err := dh.deploymentService.CreateDeployment(req.Name, req.TargetLXC, req.ComposeYAML)
+	err := dh.deploymentService.CreateDeployment(req.Name, req.TargetLXC, req.ComposeYAML, req.EnvVars)
 	if err != nil {
 		dh.logger.Error("Failed to create deployment", slog.String("error", err.Error()))
 		http.Error(w, "Failed to create deployment", http.StatusInternalServerError)
@@ -107,6 +107,7 @@ func (dh *DeploymentHandlers) ListDeploymentsHandler(w http.ResponseWriter, r *h
 			TargetAgents: targets,
 			ComposeYAML:  composeStr,
 			ComposeFile:  composeStr,
+			EnvVars:      d.EnvVars,
 		})
 	}
 
@@ -141,7 +142,8 @@ func (dh *DeploymentHandlers) UpdateDeploymentCompose(w http.ResponseWriter, r *
 	}
 
 	var req struct {
-		ComposeYAML string `json:"compose_yaml"`
+		ComposeYAML string            `json:"compose_yaml"`
+		EnvVars     map[string]string `json:"env_vars,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -152,7 +154,7 @@ func (dh *DeploymentHandlers) UpdateDeploymentCompose(w http.ResponseWriter, r *
 		return
 	}
 
-	if err := dh.deploymentService.UpdateDeployment(name, []byte(req.ComposeYAML)); err != nil {
+	if err := dh.deploymentService.UpdateDeployment(name, []byte(req.ComposeYAML), req.EnvVars); err != nil {
 		dh.logger.Error("Failed to update deployment compose", "deployment", name, "error", err)
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return

@@ -7,6 +7,7 @@ type DeploymentInfo struct {
 	TargetLXC   string
 	ComposeYAML []byte
 	Status      string
+	EnvVars     map[string]string
 }
 
 // DeploymentRequest represents a request to deploy an application
@@ -25,13 +26,14 @@ type DeploymentResponse struct {
 
 // DeploymentDto is the data transfer object for deployments
 type DeploymentDto struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	TargetLXC    string   `json:"target_lxc"`
-	TargetAgents []string `json:"target_agents"`
-	Status       string   `json:"status"`
-	ComposeYAML  string   `json:"compose_yaml"`
-	ComposeFile  string   `json:"compose_file"`
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	TargetLXC    string            `json:"target_lxc"`
+	TargetAgents []string          `json:"target_agents"`
+	Status       string            `json:"status"`
+	ComposeYAML  string            `json:"compose_yaml"`
+	ComposeFile  string            `json:"compose_file"`
+	EnvVars      map[string]string `json:"env_vars,omitempty"`
 }
 
 // DeploymentStatusUpdate represents a status update for a deployment
@@ -41,9 +43,10 @@ type DeploymentStatusUpdate struct {
 
 // CreateDeploymentRequest represents a request to create a new deployment
 type CreateDeploymentRequest struct {
-	Name        string `json:"name"`
-	ComposeYAML []byte `json:"compose_yaml"`
-	TargetLXC   string `json:"target_lxc"`
+	Name        string            `json:"name"`
+	ComposeYAML []byte            `json:"compose_yaml"`
+	TargetLXC   string            `json:"target_lxc"`
+	EnvVars     map[string]string `json:"env_vars,omitempty"`
 }
 
 // DeploymentRepository defines the persistence interface for deployments

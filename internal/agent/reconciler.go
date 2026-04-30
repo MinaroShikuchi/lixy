@@ -137,6 +137,7 @@ func (r *DeploymentReconciler) reconcileDeployment(desired []domain.DeploymentDt
 			TargetLXC:   d.TargetLXC,
 			ComposeYAML: []byte(d.ComposeYAML),
 			Status:      d.Status,
+			EnvVars:     d.EnvVars,
 		}
 	}
 	for _, d := range current {
@@ -161,7 +162,7 @@ func (r *DeploymentReconciler) reconcileDeployment(desired []domain.DeploymentDt
 		if _, exists := currentByName[name]; !exists {
 			// Deployment doesn't exist, create it
 			r.logger.Info("Creating deployment", "name", name, "id", deployment.ID)
-			if err := r.runner.Create(deployment.Name, deployment.ComposeYAML); err != nil {
+			if err := r.runner.Create(deployment.Name, deployment.ComposeYAML, deployment.EnvVars); err != nil {
 				r.logger.Error("Failed to create deployment", "name", name, "id", deployment.ID, "error", err)
 				continue
 			}

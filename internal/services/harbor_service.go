@@ -324,7 +324,7 @@ func (s *HarborService) syncMapping(mapping domain.HarborMapping) SyncResult {
 		return SyncResult{MappingName: mapping.Name, Error: err.Error()}
 	}
 
-	if err := s.deploymentSvc.CreateOrUpdateDeployment(mapping.Name, mapping.TargetAgent, composeYAML); err != nil {
+	if err := s.deploymentSvc.CreateOrUpdateDeployment(mapping.Name, mapping.TargetAgent, composeYAML, nil); err != nil {
 		s.logger.Error("harbor sync: failed to create/update deployment",
 			"mapping", mapping.Name, "error", err)
 		return SyncResult{MappingName: mapping.Name, Error: err.Error()}

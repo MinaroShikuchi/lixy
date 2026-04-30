@@ -35,6 +35,7 @@ func (s *DeploymentService) ListAllDeployments(targetLXC string) ([]domain.Deplo
 			TargetLXC:   d.TargetLXC,
 			Status:      d.Status,
 			ComposeYAML: string(d.ComposeYAML),
+			EnvVars:     d.EnvVars,
 		})
 	}
 	return deployments, nil
@@ -52,16 +53,15 @@ func (s *DeploymentService) GetDeployment(name string) (*domain.DeploymentDto, e
 		TargetLXC:   d.TargetLXC,
 		Status:      d.Status,
 		ComposeYAML: string(d.ComposeYAML),
+		EnvVars:     d.EnvVars,
 	}, nil
 }
 
-func (s *DeploymentService) CreateDeployment(name string, targetLXC string, composeYAML []byte) error {
-	// Update the deployment store
+func (s *DeploymentService) CreateDeployment(name string, targetLXC string, composeYAML []byte, envVars map[string]string) error {
 	if _, exists := s.deploymentStore.Get(name); exists {
 		return fmt.Errorf("deployment with name '%s' already exists", name)
 	}
 
-	// Verify that the target agent exists
 	_, agentExists := s.agentStore.Get(targetLXC)
 	if !agentExists {
 		return fmt.Errorf("target agent '%s' not found - agent must be registered before creating deployments", targetLXC)
@@ -72,6 +72,7 @@ func (s *DeploymentService) CreateDeployment(name string, targetLXC string, comp
 		TargetLXC:   targetLXC,
 		ComposeYAML: composeYAML,
 		Status:      "pending",
+		EnvVars:     envVars,
 	})
 	if err != nil {
 		return fmt.Errorf("%v", err)
@@ -80,13 +81,19 @@ func (s *DeploymentService) CreateDeployment(name string, targetLXC string, comp
 	return nil
 }
 
-func (s *DeploymentService) UpdateDeployment(name string, composeYAML []byte) error {
+func (s *DeploymentService) UpdateDeployment(name string, composeYAML []byte, envVars map[string]string) error {
 	if deployment, exists := s.deploymentStore.Get(name); exists {
+		// Preserve existing env vars if none provided
+		mergedEnvVars := deployment.EnvVars
+		if envVars != nil {
+			mergedEnvVars = envVars
+		}
 		err := s.deploymentStore.Update(domain.DeploymentInfo{
 			Name:        name,
 			TargetLXC:   deployment.TargetLXC,
 			ComposeYAML: composeYAML,
 			Status:      "pending",
+			EnvVars:     mergedEnvVars,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to update deployment: %v", err)
@@ -105,6 +112,7 @@ func (s *DeploymentService) UpdateDeploymentStatus(name, status string) error {
 			TargetLXC:   deployment.TargetLXC,
 			ComposeYAML: deployment.ComposeYAML,
 			Status:      status,
+			EnvVars:     deployment.EnvVars,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to update deployment status: %v", err)
@@ -147,11 +155,11 @@ func (s *DeploymentService) DeleteDeployment(name string) error {
 }
 
 // CreateOrUpdateDeployment creates a deployment if it doesn't exist, or updates it if it does.
-func (s *DeploymentService) CreateOrUpdateDeployment(name, targetLXC string, composeYAML []byte) error {
+func (s *DeploymentService) CreateOrUpdateDeployment(name, targetLXC string, composeYAML []byte, envVars map[string]string) error {
 	if _, exists := s.deploymentStore.Get(name); exists {
-		return s.UpdateDeployment(name, composeYAML)
+		return s.UpdateDeployment(name, composeYAML, envVars)
 	}
-	return s.CreateDeployment(name, targetLXC, composeYAML)
+	return s.CreateDeployment(name, targetLXC, composeYAML, envVars)
 }
 
 // ListDeploymentsByTarget returns deployments for a specific target agent

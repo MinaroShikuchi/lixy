@@ -146,7 +146,7 @@ func (r *GitOpsReconciler) reconcileDeployments(
 			// Deployment doesn't exist, create it
 			r.logger.Info("Creating new deployment", "name", name, "target", targetAgent)
 
-			if err := r.deploymentService.CreateDeployment(name, targetAgent, composeYAML); err != nil {
+			if err := r.deploymentService.CreateDeployment(name, targetAgent, composeYAML, nil); err != nil {
 				r.logger.Error("Failed to create deployment", "name", name, "error", err)
 				continue
 			}
@@ -157,7 +157,7 @@ func (r *GitOpsReconciler) reconcileDeployments(
 			if string(existing.ComposeYAML) != string(composeYAML) {
 				r.logger.Info("Updating deployment", "name", name, "target", targetAgent)
 
-				if err := r.deploymentService.UpdateDeployment(existing.ID, composeYAML); err != nil {
+				if err := r.deploymentService.UpdateDeployment(existing.ID, composeYAML, nil); err != nil {
 					r.logger.Error("Failed to update deployment", "name", name, "error", err)
 					continue
 				}
@@ -319,7 +319,7 @@ func (r *GitOpsReconciler) reconcileService(
 			"service", serviceName,
 			"target", targetAgent)
 
-		if err := r.deploymentService.CreateDeployment(deploymentName, targetAgent, composeYAML); err != nil {
+		if err := r.deploymentService.CreateDeployment(deploymentName, targetAgent, composeYAML, nil); err != nil {
 			return fmt.Errorf("failed to create deployment: %w", err)
 		}
 
@@ -348,7 +348,7 @@ func (r *GitOpsReconciler) reconcileService(
 			"old_hash", currentState.DeploymentHash,
 			"new_hash", hash)
 
-		if err := r.deploymentService.UpdateDeployment(deploymentName, composeYAML); err != nil {
+		if err := r.deploymentService.UpdateDeployment(deploymentName, composeYAML, nil); err != nil {
 			return fmt.Errorf("failed to update deployment: %w", err)
 		}
 
@@ -600,7 +600,7 @@ func (r *GitOpsReconciler) reconcileEnvironmentDeployment(
 
 	if deploymentExists {
 		// Update existing deployment
-		err = r.deploymentService.UpdateDeployment(deploymentName, composeYAML)
+		err = r.deploymentService.UpdateDeployment(deploymentName, composeYAML, nil)
 		if err != nil {
 			return fmt.Errorf("failed to update deployment: %w", err)
 		}
@@ -609,7 +609,7 @@ func (r *GitOpsReconciler) reconcileEnvironmentDeployment(
 			"target", deployment.TargetAgent)
 	} else {
 		// Create new deployment
-		err = r.deploymentService.CreateDeployment(deploymentName, targetAgent, composeYAML)
+		err = r.deploymentService.CreateDeployment(deploymentName, targetAgent, composeYAML, nil)
 		if err != nil {
 			return fmt.Errorf("failed to create deployment: %w", err)
 		}
