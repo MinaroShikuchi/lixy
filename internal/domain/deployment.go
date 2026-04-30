@@ -44,7 +44,7 @@ type DeploymentStatusUpdate struct {
 // CreateDeploymentRequest represents a request to create a new deployment
 type CreateDeploymentRequest struct {
 	Name        string            `json:"name"`
-	ComposeYAML []byte            `json:"compose_yaml"`
+	ComposeYAML string            `json:"compose_yaml"`
 	TargetLXC   string            `json:"target_lxc"`
 	EnvVars     map[string]string `json:"env_vars,omitempty"`
 }
