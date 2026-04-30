@@ -172,13 +172,13 @@ func (r *DeploymentReconciler) reconcileDeployment(desired []domain.DeploymentDt
 			// Deployment with same name already exists; could compare ComposeYAML/version here to decide updates
 			r.logger.Debug("Deployment already exists", "name", name, "id", currentByName[name].ID)
 			// compare the ComposeYAML to see if an update is needed
-			if string(deployment.ComposeYAML) != string(currentByName[name].ComposeYAML) {
+			if string(deployment.ComposeYAML) != string(currentByName[name].ComposeYAML) || !envVarsEqual(deployment.EnvVars, currentByName[name].EnvVars) {
 				r.logger.Info("Updating deployment", "name", name, "id", deployment.ID)
 				if err := r.runner.Update(domain.DeploymentRequest{
 					Name:        deployment.Name,
 					ComposeYAML: deployment.ComposeYAML,
-				},
-				); err != nil {
+					EnvVars:     deployment.EnvVars,
+				}); err != nil {
 					r.reportStatus(name, "failed")
 
 					r.logger.Error("Failed to update deployment", "name", name, "id", deployment.ID, "error", err)
@@ -193,6 +193,18 @@ func (r *DeploymentReconciler) reconcileDeployment(desired []domain.DeploymentDt
 	}
 
 	return nil
+}
+
+func envVarsEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *DeploymentReconciler) reportStatus(name, status string) {

@@ -198,12 +198,7 @@ func (runner *DeploymentRunner) ListRunning() ([]domain.DeploymentInfo, error) {
 		deploymentName := entry.Name()
 		composePath := filepath.Join("./deployments", deploymentName, "docker-compose.yml")
 
-		// If compose file doesn't exist, treat as not running and append basic info
 		if _, err := os.Stat(composePath); os.IsNotExist(err) {
-			deployments = append(deployments, domain.DeploymentInfo{
-				Name:   deploymentName,
-				Status: "stopped",
-			})
 			continue
 		}
 
@@ -216,12 +211,7 @@ func (runner *DeploymentRunner) ListRunning() ([]domain.DeploymentInfo, error) {
 		output, err := cmd.Output()
 		if err != nil || len(output) == 0 {
 			runner.logger.Info("Deployment not running", "name", deploymentName, "error", err, "output", string(output))
-			// Append as not running
-			deployments = append(deployments, domain.DeploymentInfo{
-				Name:   deploymentName,
-				Status: "stopped",
-			})
-			continue // Not running
+			continue
 		}
 		runner.logger.Info("Found running containers", "name", deploymentName, "output", string(output))
 
